@@ -1,0 +1,1851 @@
+<title>歩行の土台模型（試し）</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 配置：上に歩く人体模型（主役）、その下に歩行周期の帯、曲線、指標、検証、出所。紙の歩行解析レポートの体裁 */
+:root {
+  --bg: #f3f5f6;
+  --panel: #ffffff;
+  --ink: #17242c;
+  --mute: #5b6a73;
+  --rule: #d5dde1;
+  --accent: #1f6f8b;
+  --leg-r: #17242c;
+  --leg-l: #93a6b1;
+  --brake: #c4462f;
+  --push: #2f8a4c;
+  --meas: #a7752a;
+  --band: rgba(31,111,139,.14);
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11181c; --panel: #172126; --ink: #e3eaee; --mute: #93a3ac; --rule: #2a383f; --accent: #5cb3d1;
+  --leg-r: #e3eaee; --leg-l: #5f747f; --brake: #e8775f; --push: #5cc07b; --meas: #d8a85a; --band: rgba(92,179,209,.18); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #11181c; --panel: #172126; --ink: #e3eaee; --mute: #93a3ac; --rule: #2a383f; --accent: #5cb3d1;
+  --leg-r: #e3eaee; --leg-l: #5f747f; --brake: #e8775f; --push: #5cc07b; --meas: #d8a85a; --band: rgba(92,179,209,.18); color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.7; }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; display: grid; gap: 22px; }
+header { display: grid; gap: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; color: var(--accent); }
+h1 { font-size: clamp(24px, 4.2vw, 34px); line-height: 1.25; margin: 0; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 18px; margin: 0; font-weight: 700; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--mute); }
+section { display: grid; gap: 12px; min-width: 0; }
+.stage { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+#walk { display: block; width: 100%; height: auto; max-width: 100%; }
+.ctrl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--rule); }
+button, select { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 10px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+.ph { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 0; }
+.ph input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.readout { font-family: var(--f-mono); font-size: 13px; color: var(--mute); }
+canvas.chart { display: block; width: 100%; height: auto; max-width: 100%; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; display: grid; gap: 4px; min-width: 0; }
+.card h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--mute); }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.tw { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 500; color: var(--mute); font-size: 12.5px; white-space: nowrap; }
+td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+tr:last-child td { border-bottom: 0; }
+.tag { display: inline-block; font-family: var(--f-mono); font-size: 11.5px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--rule); color: var(--mute); white-space: nowrap; }
+.tag.m { color: var(--accent); border-color: var(--accent); }
+.tag.c, .tag.a { color: var(--meas); border-color: var(--meas); }
+.note { font-size: 13.5px; color: var(--mute); }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; max-width: 70ch; }
+.next li { color: var(--mute); }
+.copybox { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+#copyText { width: 100%; min-height: 120px; font-family: var(--f-mono); font-size: 12.5px; background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 8px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<style>
+.vsel { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.vsel .seg button { padding: 6px 12px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--mute); }
+.chk input { accent-color: var(--accent); width: 16px; height: 16px; }
+.vnote { font-size: 13.5px; color: var(--mute); min-height: 1.7em; }
+td.up { color: var(--brake); }
+td.down { color: var(--push); }
+th.cur, td.cur { background: var(--band); }
+.find { display: grid; gap: 10px; }
+.find p { max-width: 70ch; }
+.find b { font-weight: 500; color: var(--ink); }
+#cond td:last-child { white-space: nowrap; }
+ol { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; max-width: 70ch; }
+.quote { color: var(--mute); }
+.upd { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; font-size: 14px; max-width: none; }
+.upd b { font-weight: 500; color: var(--accent); }
+.vsel .seg { flex-wrap: wrap; }
+td.chg { white-space: nowrap; }
+#pair { display: block; width: 100%; height: auto; max-width: 100%; }
+#abCtl .seg button { padding: 5px 10px; }
+#kneeTab td, #kneeTab th { white-space: nowrap; }
+#kneeTab tr.cur td, #hipTab tr.cur td { background: var(--band); }
+#hipTab td, #hipTab th { white-space: nowrap; }
+#hipTab tr.ref td { color: var(--mute); }
+#kneeTab tr.ref td { color: var(--mute); }
+button.pick { padding: 3px 9px; font-size: 13px; }
+tr.cur button.pick { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+h3.sub { font-size: 15px; margin: 6px 0 0; font-weight: 700; text-wrap: balance; }
+#expTab td, #expTab th, #expTab2 td, #expTab2 th { white-space: nowrap; }
+#expTab tr.ref td { color: var(--mute); }
+#expTab2 tr.cur td { background: var(--band); }
+#expWords td { min-width: 12em; }
+#expCtl .seg button { padding: 5px 10px; }
+.fixed { font-family: var(--f-mono); font-size: 13px; color: var(--ink); background: var(--bg); border: 1px dashed var(--rule); border-radius: 4px; padding: 4px 10px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">試し ・ v7 の写しに腱のばねを足す ・ 股・膝・足首・MTP ・ 真横から</div>
+    <h1>歩行の土台模型（試し）</h1>
+    <p class="lede">健常な若年成人24人のふつうの歩き（土台）に、田代さんの言葉から作った2つの変数「足裏水平」「蹴らない」を足して比べます。変数を足した歩きは、言葉を条件に置き換え、その条件を満たす中で土台にいちばん近い関節の動きを計算で探したものです。歩調は土台と同じです。基本練習形の歩幅は 10-28 夜の版で結果として出た値（重複歩 0.85 m）にそろえ、速さはそこから決まります。両方には、歩幅を伸ばした歩きもあります。速さの近いもの同士で比べられるように、同じ人たちのゆっくり歩きも土台に加えました。</p>
+    <p class="upd"><b>試し（10-30 夜）</b>　v7 の写しに、腱のばね（アキレス腱・膝蓋腱・腸腰筋の腱）を足しました。下の「試し：腱のばねを入れると」を見てください。ここより下の v7 の節はそのまま残しています。v7 は別のページにそのままあります。</p>
+    <p class="upd"><b>10-30 朝の追加</b>　田代さんが「モデルはこの形」とした歩き（両方・膝 10°・重心が前足を越えるまで曲げる・重複歩 0.85 m）を「基本練習形」として残しました。そのうえで、歩幅を伸ばした歩きと、腰を低くした歩きを足しました（下の「腰を低くすると」）。足首の背屈の上限（25°）を変えた計算もあります。<br>10-30 未明：後ろへ戻る動きを止めた。膝を重心が前足を越えるまで曲げる歩きを足した。10-29 夜：荷重中の足裏を平らに。膝の抜きを選べる。並べる絵の上をふつうに固定。10-29 朝：着地のカクつきを直した。</p>
+  </header>
+
+  <section aria-label="歩く模型">
+    <div class="vsel">
+      <div class="seg" role="group" aria-label="歩き方" id="vsel">
+        <button type="button" data-v="base" aria-pressed="true">ふつう</button>
+        <button type="button" data-v="slow" aria-pressed="false">ゆっくり</button>
+        <button type="button" data-v="A" aria-pressed="false">足裏水平</button>
+        <button type="button" data-v="B" aria-pressed="false">蹴らない</button>
+        <button type="button" data-v="AB" aria-pressed="false">両方</button>
+      </div>
+      <label class="chk" for="ghost"><input id="ghost" type="checkbox" checked>比べる土台を重ねる（周期と骨盤をそろえて）</label>
+      <label class="chk" for="ankl"><input id="ankl" type="checkbox" checked>足首の角度を出す</label>
+    </div>
+    <div class="vsel" id="abCtl">
+      <span class="readout">両方の膝の抜き</span>
+      <div class="seg" role="group" aria-label="膝の抜きの深さ" id="kdep">
+        <button type="button" data-k="10" aria-pressed="true">10°</button>
+        <button type="button" data-k="15" aria-pressed="false">15°</button>
+        <button type="button" data-k="20" aria-pressed="false">20°</button>
+        <button type="button" data-k="25" aria-pressed="false">25°</button>
+        <button type="button" data-k="30" aria-pressed="false">30°</button>
+      </div>
+      <div class="seg" role="group" aria-label="膝を伸ばし始める時" id="khold">
+        <button type="button" data-h="c" aria-pressed="true">重心が前足を越えるまで曲げる</button>
+        <button type="button" data-h="s" aria-pressed="false">すぐ伸ばす</button>
+      </div>
+    </div>
+    <div class="vsel" id="hipCtl">
+      <span class="readout">両方の歩幅と腰</span>
+      <div class="seg" role="group" aria-label="歩幅と腰の高さ" id="khip"></div>
+    </div>
+    <p class="vnote" id="abInfo"></p>
+    <p class="vnote" id="vnote"></p>
+    <div class="stage">
+      <canvas id="walk" width="1280" height="720" aria-label="真横から見た歩行の模型"></canvas>
+      <div class="ctrl">
+        <button id="play" type="button">止める</button>
+        <div class="seg" role="group" aria-label="再生の速さ" id="spd">
+          <button type="button" data-sp="0.25" aria-pressed="false">0.25倍</button>
+          <button type="button" data-sp="0.5" aria-pressed="true">0.5倍</button>
+          <button type="button" data-sp="1" aria-pressed="false">等速</button>
+        </div>
+        <label class="ph" for="phase"><span class="readout">周期</span><input id="phase" type="range" min="0" max="999" value="0"><span id="phRead" class="readout mono">0%</span></label>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--leg-r)"></i>右脚（周期の基準）</span>
+      <span><i style="border-color:var(--leg-l)"></i>左脚</span>
+      <span><i style="border-color:var(--rule);border-top-width:4px"></i>比べる土台（重ねた時）</span>
+      <span><i style="border-color:var(--brake)"></i>反力（後ろ向き＝ブレーキ）</span>
+      <span><i style="border-color:var(--push)"></i>反力（前向き＝推進）</span>
+      <span><i style="border-color:var(--accent);border-top-style:dotted"></i>重心の通り道</span>
+    </div>
+  </section>
+
+  <section aria-label="並べて歩かせる">
+    <h2>並べて歩かせる（それぞれの時間と速さで）</h2>
+    <p class="note">上の段はふつうの歩き（ロッカー機能の土台）に固定し、下の段を選びます。二つの歩きは、それぞれ自分の周期の時間で動き、同じ線から同時に歩き出します。上の絵で重ねた土台が同期して見えるのは、重ねた土台を、選んだ歩きと同じ周期の割合の姿で、骨盤の位置をそろえて描いているためです。そのため、周期の時間の差も、進む速さの差も、上の絵には出ません。</p>
+    <div class="vsel">
+      <span class="fixed">上の段：ふつう（固定）</span>
+      <span class="readout">下の段</span>
+      <div class="seg" role="group" aria-label="下の段の歩き" id="mate">
+        <button type="button" data-v="slow" aria-pressed="false">ゆっくり</button>
+        <button type="button" data-v="A" aria-pressed="false">足裏水平</button>
+        <button type="button" data-v="B" aria-pressed="false">蹴らない</button>
+        <button type="button" data-v="AB" aria-pressed="true">両方</button>
+      </div>
+      <span class="readout">両方は上で選んだ膝の抜き</span>
+    </div>
+    <div class="stage">
+      <canvas id="pair" width="1280" height="900" aria-label="二つの歩きを上下に並べ、同じ線から同時に歩かせた絵"></canvas>
+      <div class="ctrl">
+        <button id="pplay" type="button">止める</button>
+        <button id="prestart" type="button">最初から</button>
+        <span id="pRead" class="readout mono">経過 0.0 秒</span>
+      </div>
+    </div>
+    <p class="note" id="pairNote"></p>
+    <div class="legend"><span><i style="border-color:var(--leg-r)"></i>右脚</span><span><i style="border-color:var(--leg-l)"></i>左脚</span><span><i style="border-color:var(--mute);border-top-style:dashed"></i>出発の線</span><span>目盛り 10 cm、数字は出発からの距離。再生の速さは上の絵と同じ</span></div>
+  </section>
+
+  <section aria-label="試し：ばねを入れると" id="secExp">
+    <h2>試し：腱のばね（地面に預けて返す）を入れると</h2>
+    <p class="note">10-30 夜の試しです。v7 の模型の写しに、腱のばねを足しました。v7 そのものは別に残っています。田代さんが送ってくれた投稿（チーターとカンガルーの例で、地面反力とばねを使うと速くなる、という内容）の原理を、この模型に入れると崩れるかを確かめます。投稿の動画は開けなかったので、使ったのは画面の文だけです。</p>
+    <div class="tw"><table id="expWords"><thead><tr><th>投稿の言葉（資料による）</th><th>どういう言葉か</th><th>この模型で測れること</th></tr></thead><tbody>
+      <tr><td class="quote">地面に力を「預けて」、返ってくる反発で進む</td><td>「預けて」は投稿者の感覚の言葉。「反発」は力学の言葉</td><td>関節が先に力を受けて動きを止め（負の仕事）、そのエネルギーを腱に蓄え、後で返す（正の仕事）こと。蓄えの量と、返す時に関節が筋の向きに回るか</td></tr>
+      <tr><td class="quote">チーターは筋力だけで走っていない</td><td>主張</td><td>関節の正の仕事のうち、ばねが返した分の割合</td></tr>
+      <tr><td class="quote">力むほど体は硬くなってブレーキがかかる</td><td>感覚と主張</td><td>測れない。この模型には筋の硬さ・同時に働く筋（同時収縮）が入っていない</td></tr>
+      <tr><td class="quote">カンガルーのジャンプも同じ仕組み／人も同じ</td><td>動物の例。走り・跳び</td><td>この模型は歩き。走り・跳びは、脚全体がばねとして弾む動き。歩きは、脚を支柱にして重心が乗り越える振り子が主で、ばねは足首などで部分的に効く</td></tr>
+    </tbody></table></div>
+    <p class="note">枠は西洋の力学です。「地面反力」「バネ」は投稿の側でも力学の言葉として使われています。</p>
+
+    <h3 class="sub">入れた所</h3>
+    <ol>
+      <li><b>力の分け方（動きは v7 のまま）。</b>関節の力の一部を、筋とつながった腱のばねが受け持つとしました。足首の底屈の力＝アキレス腱、膝の伸展の力＝膝蓋腱、股関節の屈曲の力＝腸腰筋の腱です。ばねは筋が引く向きの力だけで伸び、蓄えは「力の2乗 ÷（2×硬さ）」です。筋が自分で出すパワーは「関節のパワー＋蓄えの増える速さ」です。ばねの硬さは、模型のふつうの歩きで筋の正の仕事が最も小さくなる値に一つ決め、同じ体として全部の歩きに当てました。</li>
+      <li><b>探し方（動きが変わる）。</b>基本練習形の探し方に「ばねの後に筋が出す正の仕事を小さく」を足して、探し直しました。もう一つ、「蹴らない」の決め方を、足首の角度（底屈に戻らない）から「足首の筋が自分で正の仕事をしない（腱の反動で底屈するのは許す）」に替えた歩きも探しました。</li>
+    </ol>
+    <p class="note" id="expK"></p>
+
+    <h3 class="sub">段1：動きは v7 のまま、ばねで筋の仕事を分けると</h3>
+    <div class="tw"><table id="expTab"><thead></thead><tbody><tr><td>計算しています…</td></tr></tbody></table></div>
+    <div class="grid2" id="expCharts"></div>
+    <div class="legend"><span><i style="border-color:var(--accent)"></i>選んだ歩き</span><span><i style="border-color:var(--mute);border-top-style:dashed"></i>ふつう</span><span>網の帯は選んだ歩きの立脚期</span></div>
+    <div class="find" id="expFind1"></div>
+
+    <h3 class="sub">段2：探し方にばねを入れると</h3>
+    <div class="vsel" id="expCtl">
+      <span class="readout">両方を選ぶ</span>
+      <div class="seg" role="group" aria-label="試しの歩き" id="kexp"></div>
+    </div>
+    <div class="tw"><table id="expTab2"><thead></thead><tbody><tr><td>計算しています…</td></tr></tbody></table></div>
+    <div class="find" id="expFind2"></div>
+  </section>
+
+  <section aria-label="田代さんの言葉と模型の条件">
+    <h2>田代さんの言葉を、模型の条件にしたもの</h2>
+    <p class="note">数は北野さん・田代さんに確かめていない設定（c）です。変えると結果も変わります。</p>
+    <div class="tw"><table id="cond"><thead><tr><th>田代さんの言葉（資料による）</th><th>模型の条件</th><th>変数</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section aria-label="結果の読み">
+    <h2>結果の読み</h2>
+    <div class="find" id="find"></div>
+  </section>
+
+  <section aria-label="膝の抜きの深さ">
+    <h2>両方の膝の抜きの深さを変えると</h2>
+    <p class="note">速さ（0.80 m/s）・歩幅・歩調は同じまま、膝の抜きの深さと、膝を伸ばし始める時を変えた10通りです。「重心が越える」は、全身の重心が前足（立脚）の接地点（足の転がりで決まる、床に触れる点）を前へ越える時です。「重心が越えるまで曲げる」は、重心が前足の接地点を越えるまで、膝がそれまでの最大から 0.5° 以上伸びないようにした歩きです（越える時は深さで変わり、周期の26〜38%）。「選ぶ」を押すと、上の絵と曲線がその歩きになります。上の2行は比べるためのふつう・ゆっくりの歩きです。</p>
+    <div class="tw"><table id="kneeTab"><thead></thead><tbody><tr><td>計算しています…</td></tr></tbody></table></div>
+    <div class="find" id="kneeFind"></div>
+  </section>
+
+  <section aria-label="腰を低くすると">
+    <h2>腰を低くすると、歩幅はどこまで伸びるか</h2>
+    <p class="note">基本練習形（膝 10°・重心が前足を越えるまで曲げる）のほかの条件はそのままに、歩幅を 5 cm ずつ伸ばして、条件をすべて満たす最も長い歩幅を探しました。歩調は同じなので、歩幅が伸びた分だけ速くなります。腰の高さは骨盤の高さの一周期の平均で、指定した高さ以下になるよう条件にしました。足首の背屈の上限は、基本練習形と同じ 25° と、35° の2通りです。</p>
+    <div class="tw"><table id="hipTab"><thead></thead><tbody><tr><td>計算しています…</td></tr></tbody></table></div>
+    <div class="find" id="hipFind"></div>
+  </section>
+
+  <section aria-label="ロッカー理論のままか">
+    <h2>この計算は、ロッカー理論のままか</h2>
+    <div class="find" id="rockerFind"></div>
+  </section>
+
+  <section aria-label="指標">
+    <h2>指標の比べ</h2>
+    <p class="note">比べる土台は、速さの近い方です。蹴らない（1.16 m/s）はふつう（1.16 m/s）と、足裏水平と両方はゆっくり（0.83 m/s）と比べます。両方で速さが 1.0 m/s を超える歩きを選んだ時は、ふつうと比べます。負担や衝撃を表す行だけ、比べる土台より10%以上増えたものを赤、減ったものを緑にしています。速さが違うので、仕事は 1 m あたりの行で比べてください。</p>
+    <div class="tw"><table id="idx"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section aria-label="前の版との違い">
+    <h2>前の版（10-29 夜）との違い</h2>
+    <p class="note">前の版の値は、前の版の関節の動きを、いまの模型でそのまま計算し直したものです。歩幅と歩調は同じです。変えたのは、後ろへ戻らない条件、骨盤の上下の加速度の上限（0.5 g → 1.0 g）、両方の膝を重心が前足を越えるまで伸ばさないこと、です。両方は、前の版が膝の抜き 10°・すぐ伸ばす、今が 10°・重心が越えるまで曲げる、です。</p>
+    <div class="tw"><table id="diff"><thead></thead><tbody></tbody></table></div>
+    <p class="note" id="diffNote"></p>
+  </section>
+
+  <section aria-label="歩行周期とロッカー">
+    <h2>右脚の歩行周期とロッカー（選んだ歩き）</h2>
+    <div class="card"><canvas id="cycle" class="chart" width="960" height="150" aria-label="歩行周期の帯"></canvas></div>
+    <p class="note">ロッカーは足の傾きで分けました。踵で着いてつま先が上がっている間がヒールロッカー、足裏がほぼ平ら（±4°）の間がアンクルロッカー、踵が上がって MTP（母趾の付け根）を軸に回る間がフォアフットロッカーです。足裏が平らな間は、足裏をゆるい弧とみなして転がしています。</p>
+  </section>
+
+  <section aria-label="関節角度">
+    <h2>関節角度（右脚）</h2>
+    <div class="grid2" id="angCharts"></div>
+    <div class="legend"><span><i style="border-color:var(--accent)"></i>選んだ歩き</span><span><i style="border-color:var(--mute);border-top-style:dashed"></i>比べる土台</span><span><i style="border-color:var(--band);border-top-width:8px"></i>比べる土台の実測の平均±標準偏差（48脚）</span><span>MTP は接地から出た値</span></div>
+  </section>
+
+  <section aria-label="関節のパワー">
+    <h2>関節のパワー（右脚、体重1kgあたり）</h2>
+    <p class="note">正は筋が縮みながら力を出す（エネルギーを出す）、負は伸ばされながら力を出す（吸収する）。股関節の値は、この模型では小さめに出ます（下の「模型の確かさ」）。</p>
+    <div class="grid2" id="powCharts"></div>
+    <div class="legend"><span><i style="border-color:var(--accent)"></i>選んだ歩き</span><span><i style="border-color:var(--mute);border-top-style:dashed"></i>比べる土台</span><span><i style="border-color:var(--meas);border-top-style:dotted"></i>比べる土台の実測（床反力計とマーカー）</span></div>
+  </section>
+
+  <section aria-label="地面の反力">
+    <h2>地面の反力（両脚の合計、体重1kgあたり）</h2>
+    <div class="grid2" id="grfCharts"></div>
+    <div class="legend"><span><i style="border-color:var(--accent)"></i>選んだ歩き</span><span><i style="border-color:var(--mute);border-top-style:dashed"></i>比べる土台</span><span><i style="border-color:var(--meas);border-top-style:dotted"></i>比べる土台の実測の平均</span></div>
+  </section>
+
+  <section aria-label="別理論にするには">
+    <h2>別理論にするには何が必要か</h2>
+    <div class="find" id="theory"></div>
+  </section>
+
+  <section aria-label="模型の確かさ">
+    <h2>模型の確かさ</h2>
+    <div class="tw"><table id="val"><thead><tr><th>見たもの</th><th>値</th><th>読み方</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section aria-label="値と出所">
+    <h2>値と出所</h2>
+    <p class="note">札：<span class="tag m">m</span> 公開データの実測　<span class="tag">s</span> 文献（検索で確認）　<span class="tag c">c</span> 設定　<span class="tag">r</span> 推定　<span class="tag a">a</span> 調整</p>
+    <div class="tw"><table id="src"><thead><tr><th>値</th><th>大きさ</th><th>札</th><th>中身</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section aria-label="計算の決まり">
+    <h2>計算の決まり</h2>
+    <ul>
+      <li>枠組みは西洋の運動学・力学です。気や丹田の言葉は使っていません。田代さんの言葉は、関節の角度・足の高さ・時刻の条件に置き換えて使いました。</li>
+      <li>腕と胴のねじれは入れていません。上体は骨盤の上にまっすぐ立てた一つの重さです。</li>
+      <li>土台に与えるのは関節角度だけです。太もも・すね・足の傾きは「股関節の角度−骨盤の前傾」「−膝の角度」「＋足首の角度」で出します。</li>
+      <li>立っている脚の足（踵→足裏の弧→MTP）を床の上で転がし、そこから足首・膝・股関節をたどって骨盤の位置を決めます。次の脚は、その時の骨盤から脚を下ろした所に着きます。</li>
+      <li>変数を足した歩きは、太もも・すね・足の傾きに変更分（7次までの三角級数。膝を追い抜きまで曲げたままにする 15〜30° は 9次まで）を足したものです。変更の小ささ（高い次数ほど重く数える）を最小にし、条件・足が床で滑らない（40 mm 以内）・骨盤の動きのなめらかさ（前後の速さのゆれ±0.2 m/s、上下の加速度±1.0 g。10-29 夜までは ±0.5 g）を満たすものを、レーベンバーグ・マーカート法で探しました。</li>
+      <li>浮いている脚の膝・足首・踵・MTP と骨盤は、床に対して後ろへ動かないことを条件にしています（10-30）。両方の「重心が前足を越えるまで曲げる」では、全身の重心が前足の接地点を越えるまで膝の角度が減らない（伸びない）ことを条件にしています。</li>
+      <li>歩幅を伸ばした歩き・腰を低くした歩きは、基本練習形の条件に、重複歩の長さと、骨盤の高さの一周期の平均の上限を足して、探し直したものです（10-30）。足首の背屈の上限は 25°（基本）と 35° です。</li>
+      <li>荷重中の足裏は、接地から周期の30%まで傾き ±0.5° 以内にしています（10-29 夜）。そのあと踵が浮くのは止めず、浮けば MTP を軸に回ります。足首の角度は条件にせず、足裏と脛の向きから決まる結果です。</li>
+      <li>両脚で支える間は、後ろの脚から前の脚へ、周期の2%（蹴らないでは1%）の間で乗り移るようにつなぎます。変数の歩きでは、乗り移りの前後で骨盤の速さ（後ろ足から決めたものと前足から決めたもの）の差が前後・上下とも 0.1 m/s 以内になることを、条件に入れています（10-29）。歩幅は前の版の結果にそろえました。</li>
+      <li>上下の反力は全身の重心の上下の加速度から、前後の反力は各脚の反力が接地点から重心を通ると仮定して出します。細かい揺れは周期の4次（約3.8 Hz）を目安にならしています。</li>
+      <li>試し（10-30 夜）：腱のばねは、筋が引く向きの関節モーメント（足首の底屈・膝の伸展・股関節の屈曲）だけで伸びる直列のばねとしました。蓄えは「モーメントの2乗÷（2×回転の硬さ）」、筋が自分で出すパワーは「関節のパワー＋蓄えの増える速さ」です。ばねは動き・反力・関節の力を変えません。</li>
+      <li>関節のモーメントとパワーは、足→すね→太ももの順に、各部の重さと回る勢いを入れて求めます（逆動力学）。重心の仕事は脚ごとの反力と重心の速さの積です。</li>
+    </ul>
+  </section>
+
+  <section aria-label="値をコピー">
+    <h2>値をコピー</h2>
+    <div class="copybox"><button id="copy" type="button">値をコピー</button><span id="copyMsg" class="readout"></span></div>
+    <textarea id="copyText" readonly aria-label="コピー用の値"></textarea>
+  </section>
+
+  <p class="note">データの出所：Fukuchi, Fukuchi, Duarte「A public dataset of overground and treadmill walking kinematics and kinetics in healthy individuals」PeerJ 2018（Figshare DOI 10.6084/m9.figshare.5722711）。床の上をふつうの速さで歩いた若年24人。体節の重さの割合は Winter（2009）が載せた Dempster の値（BMC の資料で確認）。押し出しと衝突の関係は Kuo「Energetics of actively powered locomotion using the simplest walking model」J Biomech Eng 124(1):113–120。試しの腱のばね：Ishikawa, Komi, Grey, Lepola, Bruggemann「Muscle-tendon interaction and elastic energy usage in human walking」J Appl Physiol 2005;99(2):603–608。Whittington, Silder, Heiderscheit, Thelen「The contribution of passive-elastic mechanisms to lower extremity joint kinetics during human walking」Gait & Posture 27(4):628–634。歩きにも柔らかい脚（ばね）が要るという模型：Geyer, Seyfarth, Blickhan「Compliant leg behaviour explains basic dynamics of walking and running」2006、273巻 2861–2867（掲載誌名は確認できたページの表記が揺れていて未確認）。</p>
+</div>
+
+<script>
+// 土台の模型：股・膝・足首・MTP の4関節で、正常歩行の歩行周期を再現する
+// 方式：動きを与えて力を計算する（逆動力学）。矢状面。骨盤の回旋と傾きだけ左右の股関節の前後・上下に効かせる。
+// 入力：関節角度（健常な若年成人の平均。Fukuchi ら 2018 の公開データ）＝札 m
+// 結果として出るもの：歩幅・速さ・重心の動き・反力・重心の仕事など
+const KISO = (function () {
+  const D = /*DATA*/{"meas_mh":[-0.4677,-0.485,-0.4667,-0.4211,-0.4091,-0.4178,-0.4251,-0.4463,-0.4964,-0.5504,-0.5738,-0.5565,-0.5066,-0.4392,-0.3709,-0.3136,-0.27,-0.2355,-0.2047,-0.1753,-0.1458,-0.1159,-0.0871,-0.0611,-0.0384,-0.0177,0.0025,0.0231,0.0426,0.0607,0.0779,0.0948,0.1111,0.1275,0.1451,0.1646,0.186,0.2093,0.2359,0.2665,0.301,0.3392,0.3808,0.4239,0.4664,0.5065,0.5423,0.5726,0.5967,0.613,0.6194,0.6148,0.5999,0.5773,0.5517,0.528,0.5054,0.4783,0.4427,0.3958,0.3404,0.2847,0.2382,0.2219,0.2327,0.2515,0.2584,0.2422,0.2068,0.1618,0.1172,0.08,0.0528,0.0354,0.0253,0.0187,0.013,0.0076,0.0025,-0.0026,-0.0079,-0.0128,-0.0176,-0.0222,-0.0265,-0.0304,-0.0353,-0.0435,-0.0589,-0.0845,-0.1209,-0.1669,-0.2199,-0.2772,-0.3357,-0.3918,-0.4395,-0.4714,-0.477,-0.4314],"meas_mk":[-0.2693,-0.2428,-0.1916,-0.1264,-0.0803,-0.0401,0.0227,0.1093,0.1968,0.2715,0.3325,0.3797,0.4119,0.4296,0.4336,0.4252,0.4064,0.3797,0.3476,0.312,0.2746,0.237,0.1998,0.1632,0.1275,0.0933,0.0609,0.0307,0.0021,-0.0251,-0.0509,-0.0756,-0.0994,-0.1223,-0.1439,-0.1641,-0.1832,-0.2014,-0.2179,-0.2323,-0.244,-0.2519,-0.2552,-0.2531,-0.2451,-0.2307,-0.2103,-0.1844,-0.1538,-0.1195,-0.0829,-0.0453,-0.0084,0.0254,0.0541,0.0774,0.095,0.106,0.1085,0.1008,0.0821,0.0567,0.0334,0.0281,0.0405,0.0596,0.0746,0.0794,0.075,0.0649,0.0528,0.0414,0.0319,0.0243,0.0181,0.0122,0.0062,0.0001,-0.0059,-0.0119,-0.018,-0.0244,-0.0306,-0.0365,-0.0422,-0.048,-0.0546,-0.0631,-0.0749,-0.091,-0.1115,-0.1356,-0.1625,-0.192,-0.224,-0.258,-0.2905,-0.3139,-0.3165,-0.2822],"meas_ma":[0.005,-0.0068,-0.0319,-0.0674,-0.1015,-0.1229,-0.1291,-0.1221,-0.1048,-0.0808,-0.0534,-0.0248,0.0039,0.0325,0.0613,0.0907,0.1208,0.1519,0.1838,0.2164,0.2494,0.2826,0.3158,0.3489,0.382,0.4154,0.4493,0.4842,0.5204,0.5583,0.5981,0.6399,0.6839,0.7303,0.7792,0.8306,0.8847,0.9411,0.9992,1.0586,1.1184,1.1777,1.2354,1.2899,1.3395,1.382,1.4155,1.438,1.4474,1.4419,1.4196,1.3775,1.3125,1.2214,1.1026,0.9573,0.7905,0.612,0.4346,0.2756,0.1471,0.0552,-0.0006,-0.0255,-0.0322,-0.0316,-0.0283,-0.0239,-0.0195,-0.0158,-0.0133,-0.0117,-0.0108,-0.0102,-0.0099,-0.0097,-0.0098,-0.0102,-0.0109,-0.0116,-0.0124,-0.0134,-0.0144,-0.0156,-0.0168,-0.018,-0.0191,-0.0201,-0.0207,-0.0207,-0.0201,-0.0185,-0.0158,-0.0121,-0.0074,-0.0024,0.0024,0.0062,0.008,0.0073],"prot":[0.0614,[5.1877,2.7019],[0.0623,-0.0055],[0.7305,-0.3977],[0.0018,0.0099],[0.2971,0.3456],[0.0152,0.0313],[-0.0619,0.073],[-0.0039,0.0229],[-0.0062,-0.0052],[-0.0017,0.0097]],"pobl":[0.0095,[2.6424,3.1199],[0.0295,0.0196],[-1.3705,0.0393],[-0.0056,0.0074],[-0.0791,-0.1233],[-0.0124,0.0012],[0.0158,-0.0072],[0.0014,-0.0039],[-0.0057,-0.0084],[0.0013,0.0013]],"th":[4.0273,[19.2913,-3.0477],[-3.5158,-1.4801],[-0.6571,1.8355],[-0.1408,-0.087],[-0.3435,0.1447],[0.0493,0.0597],[-0.003,-0.0268],[0.1087,0.0247],[0.0512,0.0212],[0.0516,0.0676]],"sh":[-15.994,[21.089,18.9589],[12.2342,-6.576],[1.0238,-3.3007],[0.8566,-0.5276],[0.4364,-0.7032],[-0.0722,-0.2569],[0.0034,-0.1111],[-0.067,-0.1334],[-0.0682,-0.0865],[-0.0379,-0.0678]],"ft":[-12.8569,[18.6284,23.4188],[13.3226,-13.1473],[-3.1126,-3.0654],[2.6629,-0.0048],[0.5648,-1.8422],[0.1483,0.2467],[0.7343,-0.2188],[0.0538,-0.1176],[0.2122,0.1126],[0.1193,-0.0122]],"hip":[14.3859,[19.2717,-3.0653],[-2.8897,-1.6657],[-0.6407,1.7898],[0.007,-0.1186],[-0.3367,0.1316],[-0.0409,0.0788],[-0.0135,-0.0305],[0.1043,-0.0028],[0.0456,0.0142],[0.0412,0.06]],"knee":[20.0213,[-1.7977,-22.0066],[-15.7501,5.0959],[-1.6809,5.1362],[-0.9974,0.4406],[-0.7799,0.8478],[0.1215,0.3166],[-0.0064,0.0843],[0.1757,0.1582],[0.1194,0.1077],[0.0895,0.1354]],"ank":[3.1372,[-2.4606,4.4599],[1.0884,-6.5713],[-4.1364,0.2353],[1.8063,0.5228],[0.1285,-1.139],[0.2205,0.5036],[0.7308,-0.1077],[0.1208,0.0158],[0.2804,0.1991],[0.1571,0.0556]],"TO":0.6221,"meas_fx":[0.0353,0.0035,-0.1113,-0.34,-0.6353,-0.8995,-1.0919,-1.248,-1.3885,-1.497,-1.557,-1.567,-1.534,-1.4676,-1.3779,-1.2741,-1.1641,-1.0535,-0.9466,-0.8461,-0.7542,-0.6718,-0.5992,-0.5353,-0.4789,-0.4284,-0.3824,-0.34,-0.3002,-0.2623,-0.2254,-0.1887,-0.1511,-0.1119,-0.07,-0.0243,0.0266,0.0843,0.1502,0.2255,0.311,0.407,0.5128,0.6276,0.75,0.8789,1.0131,1.1511,1.2909,1.4292,1.5616,1.6808,1.776,1.8337,1.8379,1.7724,1.6235,1.3886,1.0799,0.7438,0.4335,0.1889,0.0528,0.0076,0.0004,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"meas_fy":[0.5134,1.4547,2.7138,3.8929,4.8167,5.5314,6.1402,6.7267,7.3374,7.9812,8.6243,9.2108,9.6885,10.026,10.2171,10.2736,10.2164,10.0688,9.8531,9.5895,9.2971,8.9942,8.6972,8.4202,8.1745,7.9682,7.8062,7.6906,7.6215,7.5963,7.6112,7.662,7.7448,7.8566,7.9957,8.1615,8.3542,8.572,8.8155,9.0807,9.3624,9.6537,9.9453,10.2253,10.4792,10.6916,10.8466,10.9299,10.9282,10.8282,10.6162,10.2727,9.7739,9.0957,8.2241,7.1669,5.9586,4.6697,3.3972,2.2623,1.3413,0.655,0.2224,0.056,0.0066,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"sd_hip":[6.33,6.42,6.5,6.57,6.66,6.76,6.88,6.99,7.1,7.18,7.24,7.26,7.25,7.22,7.18,7.14,7.12,7.12,7.14,7.15,7.16,7.15,7.11,7.06,7,6.94,6.87,6.81,6.76,6.71,6.69,6.67,6.68,6.69,6.71,6.73,6.76,6.79,6.82,6.83,6.83,6.81,6.78,6.75,6.71,6.69,6.68,6.68,6.7,6.73,6.76,6.78,6.8,6.83,6.88,6.95,7.04,7.13,7.22,7.3,7.35,7.38,7.39,7.38,7.36,7.32,7.27,7.2,7.12,7.03,6.94,6.84,6.75,6.67,6.59,6.53,6.47,6.41,6.35,6.31,6.27,6.24,6.22,6.22,6.21,6.21,6.2,6.18,6.15,6.11,6.05,5.99,5.91,5.84,5.78,5.74,5.73,5.78,5.86,5.96],"sd_knee":[3.9,3.94,3.96,4.02,4.13,4.33,4.57,4.83,5.07,5.25,5.37,5.42,5.44,5.42,5.4,5.38,5.36,5.35,5.33,5.3,5.27,5.22,5.16,5.1,5.02,4.95,4.87,4.79,4.7,4.61,4.51,4.43,4.35,4.3,4.26,4.26,4.27,4.3,4.34,4.38,4.4,4.41,4.41,4.4,4.38,4.36,4.35,4.34,4.34,4.35,4.37,4.41,4.48,4.59,4.75,4.95,5.19,5.43,5.66,5.85,5.97,6.02,5.99,5.88,5.69,5.44,5.14,4.81,4.47,4.16,3.91,3.75,3.68,3.71,3.83,4.04,4.3,4.62,4.97,5.34,5.73,6.11,6.47,6.79,7.06,7.26,7.37,7.39,7.3,7.1,6.79,6.36,5.84,5.25,4.63,4.07,3.68,3.54,3.63,3.82],"sd_ank":[2.69,2.71,2.74,2.78,2.82,2.88,2.97,3.06,3.13,3.18,3.22,3.25,3.27,3.28,3.28,3.28,3.27,3.25,3.22,3.19,3.14,3.09,3.04,2.98,2.93,2.89,2.85,2.81,2.79,2.77,2.75,2.75,2.77,2.8,2.84,2.88,2.93,2.98,3.03,3.08,3.12,3.16,3.2,3.24,3.27,3.31,3.34,3.38,3.42,3.48,3.55,3.64,3.76,3.91,4.11,4.33,4.57,4.8,4.95,4.98,4.88,4.73,4.64,4.67,4.85,5.17,5.56,5.93,6.17,6.26,6.2,6.03,5.8,5.55,5.29,5.05,4.81,4.57,4.33,4.08,3.84,3.6,3.37,3.15,2.92,2.7,2.48,2.28,2.12,2.02,1.99,2.03,2.14,2.28,2.42,2.54,2.63,2.68,2.7,2.71]}/*END*/;
+  const RAD = Math.PI / 180;
+
+  // 値と出所の札：s 検索、m 実測、c 設定、r 再構成（推定）
+  const P0 = {
+    Lt: 0.377,   // m 太もも（大転子→膝の外側のマーカー）。若年20人の平均
+    Ls: 0.403,   // m すね（膝→外くるぶし）
+    ha: 0.065,   // m 足首の高さ（足裏を床に付けた時）
+    hb: 0.043,   // m 踵の点：足首の後ろ（踵のマーカー）
+    mf: 0.150,   // m MTP の点：足首の前（第1中足骨頭のマーカー）
+    toe: 0.05,   // c 足指の長さ（絵だけに使う）
+    eps: 4,      // c 足裏が平らとみなす傾き（度）。この間は足裏の弧で転がる
+    T: (D && D.T) || 1.066, // m 一周期の時間（若年24人のふつうの速さ 1.066 s、マーカーから）
+    TO: null,    // m 離地（周期の割合）。反力から。データの値を使う
+    mHat: 0.678, mTh: 0.100, mSh: 0.0465, mFt: 0.0145, // s 体節の重さの割合（Winter による Dempster の値）
+    cTh: 0.433, cSh: 0.433, cFt: 0.5,                  // s 体節の重心の位置（近い端から）
+    gTh: 0.323, gSh: 0.302, gFt: 0.475,                // s 回転半径（体節の長さに対する割合）
+    W: 0.245,    // r 骨盤の回旋・傾きのてこの幅（上前腸骨棘の間の実測を借用）
+    hatH: 0.35,  // r 上体（頭・腕・胴）の重心：骨盤の中心の上。肩の高さが未確認のため推定
+    g: 9.81
+  };
+
+  function four(c, ph) {
+    let y = c[0];
+    for (let n = 1; n < c.length; n++) {
+      const w = 2 * Math.PI * n * ph;
+      y += c[n][0] * Math.cos(w) + c[n][1] * Math.sin(w);
+    }
+    return y;
+  }
+  const mod1 = x => x - Math.floor(x);
+
+  // ---- 変数を足す口 ----
+  // 各変数は {key, name, legs(a, ph, amt, V) で角度を変える, pelvis(psi, ob, phR, amt, V) で骨盤を変える}
+  const MODS = [];
+  function angles(ph, V) {
+    let a = { th: four(D.th, ph), sh: four(D.sh, ph), ft: four(D.ft, ph) };
+    if (V && V.d) { a.th += four(V.d.th, ph); a.sh += four(V.d.sh, ph); a.ft += four(V.d.ft, ph); } // 変数：角度の変更分（三角級数）
+    for (const m of MODS) if (V && V[m.key] && m.legs) a = m.legs(a, ph, V[m.key], V);
+    return a;
+  }
+  // 骨盤：右脚の位相で。回旋は右が前に出る向き、傾きは右が上がる向きが正
+  function pelvis(phR, V) {
+    let psi = four(D.prot, phR), ob = four(D.pobl, phR);
+    for (const m of MODS) if (V && V[m.key] && m.pelvis) [psi, ob] = m.pelvis(psi, ob, phR, V[m.key], V);
+    return [psi, ob];
+  }
+  function pelvisOff(phR, P, V) {
+    const [psi, ob] = pelvis(phR, V), h = P.W / 2;
+    const dx = h * Math.sin(psi * RAD), dz = h * Math.sin(ob * RAD);
+    return { off: [[dx, dz], [-dx, -dz]], psi, ob };
+  }
+
+  const rot = (ang, p) => { const c = Math.cos(ang * RAD), s = Math.sin(ang * RAD); return [c * p[0] - s * p[1], s * p[0] + c * p[1]]; };
+
+  // ---- 立脚の足の転がり（踵 → 足裏の弧 → MTP）----
+  // 一つの立脚について、接地の踵の位置を 0 としたときの足首の位置を位相の関数として作る
+  function footGeom(P) {
+    const Hl = [-P.hb, -P.ha], Ml = [P.mf, -P.ha];
+    const c = P.hb + P.mf, e = P.eps, R = c / (2 * Math.sin(e * RAD));
+    const Ol = [(Ml[0] + Hl[0]) / 2, -P.ha + R * Math.cos(e * RAD)];
+    return { Hl, Ml, R, Ol, e };
+  }
+  // 足のいちばん低い点（足首からの相対）：踵・足裏の弧の接点・MTP のうち、足の傾きで決まるもの
+  function lowPoint(f, P) {
+    const G = footGeom(P);
+    if (f > G.e) return rot(f, G.Hl);
+    if (f < -G.e) return rot(f, G.Ml);
+    const o = rot(f, G.Ol); return [o[0], o[1] - G.R];
+  }
+  function stanceRoll(P, V) {
+    const { Hl, Ml, R, Ol, e } = footGeom(P);
+    const ft = ph => angles(ph, V).ft;
+    // ±eps を横切る位相を探す
+    const n = 2000, cr = [];
+    for (let i = 0; i < n; i++) {
+      const a = i / n * P.TO, b = (i + 1) / n * P.TO;
+      for (const th of [e, -e]) {
+        let fa = ft(a) - th, fb = ft(b) - th;
+        if (fa === 0 || fa * fb < 0) {
+          let lo = a, hi = b;
+          for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2, fm = ft(m) - th; if (fa * fm <= 0) hi = m; else { lo = m; fa = fm; } }
+          cr.push({ ph: (lo + hi) / 2, th });
+        }
+      }
+    }
+    cr.sort((u, w) => u.ph - w.ph);
+    const f0 = ft(0);
+    let seg = { from: 0, mode: f0 > e ? 'heel' : f0 < -e ? 'mtp' : 'arc', x: 0, fe: f0 };
+    const segs = [seg];
+    const contactX = (s, f) => s.mode === 'arc' ? s.x - R * (f - s.fe) * RAD : s.x;
+    for (const k of cr) {
+      const cur = segs[segs.length - 1];
+      let mode;
+      if (cur.mode === 'heel' && k.th === e) mode = 'arc';
+      else if (cur.mode === 'mtp' && k.th === -e) mode = 'arc';
+      else if (cur.mode === 'arc') mode = k.th === e ? 'heel' : 'mtp';
+      else continue;
+      const x = contactX(cur, k.th);
+      segs.push({ from: k.ph, mode, x, fe: k.th });
+    }
+    function at(ph) {
+      let s = segs[0];
+      for (const q of segs) if (q.from <= ph) s = q;
+      const f = ft(ph);
+      let ank;
+      if (s.mode === 'heel') { const p = rot(f, Hl); ank = [s.x - p[0], -p[1]]; }
+      else if (s.mode === 'mtp') { const p = rot(f, Ml); ank = [s.x - p[0], -p[1]]; }
+      else { const p = rot(f, Ol); ank = [contactX(s, f) - p[0], R - p[1]]; }
+      return { ank, mode: s.mode, contact: s.mode === 'heel' ? s.x : s.mode === 'mtp' ? s.x : contactX(s, f) };
+    }
+    return { at, segs, R };
+  }
+
+  function legDown(hip, a, P) {
+    const knee = [hip[0] + P.Lt * Math.sin(a.th * RAD), hip[1] - P.Lt * Math.cos(a.th * RAD)];
+    const ank = [knee[0] + P.Ls * Math.sin(a.sh * RAD), knee[1] - P.Ls * Math.cos(a.sh * RAD)];
+    const h = rot(a.ft, [-P.hb, -P.ha]), m = rot(a.ft, [P.mf, -P.ha]);
+    return { hip, knee, ank, heel: [ank[0] + h[0], ank[1] + h[1]], mtp: [ank[0] + m[0], ank[1] + m[1]] };
+  }
+  // 足首から上へ：股関節の位置
+  function hipUp(ank, a, P) {
+    const knee = [ank[0] - P.Ls * Math.sin(a.sh * RAD), ank[1] + P.Ls * Math.cos(a.sh * RAD)];
+    return [knee[0] - P.Lt * Math.sin(a.th * RAD), knee[1] + P.Lt * Math.cos(a.th * RAD)];
+  }
+
+  // 5次のエルミート補間（位置・速さ・加速度を両端でつなぐ）
+  function quintic(p0, v0, a0, p1, v1, a1, h) {
+    const c0 = p0, c1 = v0 * h, c2 = a0 * h * h / 2;
+    const c3 = -10 * p0 - 6 * v0 * h - 1.5 * a0 * h * h + 10 * p1 - 4 * v1 * h + 0.5 * a1 * h * h;
+    const c4 = 15 * p0 + 8 * v0 * h + 1.5 * a0 * h * h - 15 * p1 + 7 * v1 * h - a1 * h * h;
+    const c5 = -6 * p0 - 3 * v0 * h - 0.5 * a0 * h * h + 6 * p1 - 3 * v1 * h + 0.5 * a1 * h * h;
+    return s => c0 + s * (c1 + s * (c2 + s * (c3 + s * (c4 + s * c5))));
+  }
+
+  function simulate(V, opt) {
+    const P = Object.assign({}, P0, { TO: (V && V.TO) || D.TO }, opt || {});
+    const N = (opt && opt.N) || 600, dt = P.T / N;
+    const DS = P.TO - 0.5;
+    const roll = stanceRoll(P, V);
+    // 脚 k（0 右、1 左）の位相 phk の立脚から求めた骨盤の中心（その脚の接地の踵を 0 とする）
+    const pcRel = (k, phk) => {
+      const a = angles(phk, V), r = roll.at(phk);
+      const hip = hipUp(r.ank, a, P);
+      const phR = k === 0 ? phk : mod1(phk + 0.5);
+      const o = pelvisOff(phR, P, V).off[k];
+      return [hip[0] - o[0], hip[1] - o[1]];
+    };
+    const derivs = (k, phk) => { // 位置・速さ・加速度（時間で）
+      const h = 1e-4;
+      const p = pcRel(k, phk), pp = pcRel(k, phk + h), pm = pcRel(k, phk - h);
+      return [0, 1].map(j => [p[j], (pp[j] - pm[j]) / (2 * h * P.T), (pp[j] - 2 * p[j] + pm[j]) / (h * h * P.T * P.T)]);
+    };
+    // 接地の踵の位置：その時の骨盤から脚を下ろして求める
+    const heelAtIC = (k, pc, phR) => {
+      const o = pelvisOff(phR, P, V).off[k];
+      const a0 = angles(0, V), g = legDown([pc[0] + o[0], pc[1] + o[1]], a0, P), lp = lowPoint(a0.ft, P);
+      return [g.ank[0] + lp[0], g.ank[1] + lp[1]]; // 接地の点（踵・足裏・MTP）
+    };
+    // 一周期：右の接地を x=0
+    const XR = 0;
+    const pcAt05 = (() => { const p = pcRel(0, 0.5); return [XR + p[0], p[1]]; })();
+    const hL = heelAtIC(1, pcAt05, 0.5);
+    const XL = hL[0];
+    const pcAt1 = (() => { const p = pcRel(1, 0.5); return [XL + p[0], p[1]]; })();
+    const hR2 = heelAtIC(0, pcAt1, 0);
+    const L = hR2[0] - XR;   // 重複歩距離（歩幅2つ分）
+    const icErr = [hL[1], hR2[1]];
+    // 両脚支持の間の骨盤：直前の立脚から求めた動きと、次の立脚から求めた動きを5次式でつなぐ
+    const bridge = (kTrail, Xtrail, kLead, Xlead) => {
+      const a = derivs(kTrail, 0.5), b = derivs(kLead, DS), h = DS * P.T;
+      const f = [0, 1].map(j => quintic(
+        (j === 0 ? Xtrail : 0) + a[j][0], a[j][1] * h, a[j][2] * h * h,
+        (j === 0 ? Xlead : 0) + b[j][0], b[j][1] * h, b[j][2] * h * h, 1).bind(null));
+      // quintic(p0,v0*h,...) を h=1 の正規化で使う
+      return s => [f[0](s), f[1](s)];
+    };
+    // 橋渡しの長さ（位相）。既定は両脚支持の全体
+    const BW = Math.min((opt && opt.bw) || 0.02, DS); // c 前の脚へ乗り移る橋渡しの長さ（周期の2%）
+    const bridge2 = (kTrail, Xtrail, kLead, Xlead) => {
+      const a = derivs(kTrail, 0.5), b = derivs(kLead, BW), h = BW * P.T;
+      const f = [0, 1].map(j => quintic(
+        (j === 0 ? Xtrail : 0) + a[j][0], a[j][1] * h, a[j][2] * h * h,
+        (j === 0 ? Xlead : 0) + b[j][0], b[j][1] * h, b[j][2] * h * h, 1));
+      return s => [f[0](s), f[1](s)];
+    };
+    // 乗り移りの食い違い：後ろの脚から決めた骨盤の速さ（後ろ脚の位相0.5）と、前の脚から決めた骨盤の速さ（前脚の接地）
+    const brA = bridge2(1, XL - L, 0, XR);   // 位相 0〜BW：左が後ろ、右が前
+    const brC = bridge2(0, XR, 1, XL);       // 位相 0.5〜0.5+BW：右が後ろ、左が前
+    // 乗り移りの食い違い：後ろの脚から決めた骨盤の速さ（後ろ脚の位相0.5）と、前の脚から決めた骨盤の速さ（橋渡しの終わり）。差 dv が大きいと着地で骨盤が急に止まる・跳ねる
+    const swV = (() => { const a = derivs(1, 0.5), b = derivs(0, BW); return { trail: [a[0][1], a[1][1]], lead: [b[0][1], b[1][1]], dv: [b[0][1] - a[0][1], b[1][1] - a[1][1]] }; })();
+    const dsMode = (opt && opt.ds) || 'quintic';
+    const fyAt = p => { const q = mod1(p) * 100, i = Math.floor(q), f = q - i; return D.meas_fy[i % 100] * (1 - f) + D.meas_fy[(i + 1) % 100] * f; };
+    const wOf = s => {
+      if (dsMode === 'smooth') return s * s * (3 - 2 * s);
+      const a = fyAt(s * DS), b = fyAt(s * DS + 0.5); return a / (a + b); // m 実測の反力の割合（前の脚の分）
+    };
+    const blend = (kT, XT, phT, kL, XLd, phL, s) => {
+      const t = pcRel(kT, phT), l = pcRel(kL, phL), w = wOf(s);
+      return [(1 - w) * (XT + t[0]) + w * (XLd + l[0]), (1 - w) * t[1] + w * l[1]];
+    };
+    const pcOf = phR => {
+      if (dsMode !== 'quintic') {
+        if (phR < DS) return blend(1, XL - L, phR + 0.5, 0, XR, phR, phR / DS);
+        if (phR >= 0.5 && phR < 0.5 + DS) return blend(0, XR, phR, 1, XL, phR - 0.5, (phR - 0.5) / DS);
+      }
+      if (phR < BW) return brA(phR / BW);
+      if (phR < 0.5) { const p = pcRel(0, phR); return [XR + p[0], p[1]]; }
+      if (phR >= 0.5 && phR < 0.5 + BW) return brC((phR - 0.5) / BW);
+      const p = pcRel(1, phR - 0.5); return [XL + p[0], p[1]];
+    };
+    // 一周期の記録
+    const R = [];
+    let maxSlip = [0, 0], minClear = 1;
+    for (let i = 0; i < N; i++) {
+      const phR = i / N, ph = [phR, mod1(phR + 0.5)];
+      const pc = pcOf(phR);
+      const po = pelvisOff(phR, P, V);
+      const A = ph.map(p => angles(p, V));
+      const hips = [0, 1].map(k => [pc[0] + po.off[k][0], pc[1] + po.off[k][1]]);
+      const legs = A.map((a, k) => legDown(hips[k], a, P));
+      const stance = ph.map(p => p < P.TO);
+      const X = [XR, phR < 0.5 ? XL - L : XL];
+      const info = [0, 1].map(k => {
+        if (!stance[k]) return null;
+        const r = roll.at(ph[k]);
+        // 足の離れ（模型の閉じない誤差）
+        const want = [X[k] + r.ank[0], r.ank[1]];
+        const e = Math.hypot(legs[k].ank[0] - want[0], legs[k].ank[1] - want[1]);
+        maxSlip[k] = Math.max(maxSlip[k], e);
+        return { mode: r.mode, cx: X[k] + r.contact, err: e };
+      });
+      // 遊脚のつま先の高さ（足指はまっすぐ）
+      for (let k = 0; k < 2; k++) if (!stance[k] && ph[k] > P.TO + 0.05 && ph[k] < 0.98) {
+        minClear = Math.min(minClear, legs[k].mtp[1], legs[k].heel[1]); // 遊脚の MTP と踵の高さ
+      }
+      R.push({ phR, ph, pc, psi: po.psi, ob: po.ob, A, legs, stance, info });
+    }
+    if (opt && opt.kin) return { P, roll, R, N, dt, L, icErr, maxSlip, minClear, XL, swV, pcOf };
+    // 右の足の位置を一周期で閉じる（左の接地 XL は右から L/2 前後）
+    // ---- 重心と角運動量 ----
+    const M = P.mHat + 2 * (P.mTh + P.mSh + P.mFt);
+    const segs = s => {
+      const out = [{ m: P.mHat, p: [s.pc[0], s.pc[1] + P.hatH], I: 0, ang: 0 }];
+      s.legs.forEach((g, k) => {
+        const a = s.A[k];
+        out.push({ m: P.mTh, p: [g.hip[0] + P.cTh * (g.knee[0] - g.hip[0]), g.hip[1] + P.cTh * (g.knee[1] - g.hip[1])], I: P.mTh * (P.gTh * P.Lt) ** 2, ang: a.th });
+        out.push({ m: P.mSh, p: [g.knee[0] + P.cSh * (g.ank[0] - g.knee[0]), g.knee[1] + P.cSh * (g.ank[1] - g.knee[1])], I: P.mSh * (P.gSh * P.Ls) ** 2, ang: a.sh });
+        out.push({ m: P.mFt, p: [g.ank[0] + P.cFt * (g.mtp[0] - g.ank[0]), g.ank[1] + P.cFt * (g.mtp[1] - g.ank[1])], I: P.mFt * (P.gFt * Math.hypot(P.mf, P.ha)) ** 2, ang: a.ft });
+      });
+      return out;
+    };
+    const SG = R.map(segs);
+    const v = L / P.T;
+    const per = (j, arr, isX) => { // 周期の添字
+      const q = ((j % N) + N) % N, wrap = Math.floor(j / N);
+      return arr[q] + (isX ? wrap * L : 0);
+    };
+    const com = SG.map(sg => { let x = 0, z = 0; sg.forEach(s => { x += s.m * s.p[0]; z += s.m * s.p[1]; }); return [x / M, z / M]; });
+    const cx = com.map(c => c[0]), cz = com.map(c => c[1]);
+    // 周期信号を三角級数にして微分する。高い次数ほど弱める（ガウスの重み、c：sig 次で 0.61 倍）
+    const sig = (opt && opt.sig) || 4, K = Math.ceil(sig * 4);
+    const lowd = (arr, order) => {
+      const a = [], b = [];
+      for (let n = 0; n <= K; n++) { let sa = 0, sb = 0; for (let j = 0; j < N; j++) { const w = 2 * Math.PI * n * j / N; sa += arr[j] * Math.cos(w); sb += arr[j] * Math.sin(w); } const gw = Math.exp(-0.5 * (n / sig) ** 2); a.push(gw * sa * (n ? 2 : 1) / N); b.push(gw * sb * 2 / N); }
+      return arr.map((_, j) => { let y = order === 0 ? a[0] : 0; for (let n = 1; n <= K; n++) { const om = 2 * Math.PI * n / P.T, w = 2 * Math.PI * n * j / N; let c = a[n], d = b[n]; // y = c cos + d sin
+          for (let o = 0; o < order; o++) { const c2 = d * om, d2 = -c * om; c = c2; d = d2; }
+          y += c * Math.cos(w) + d * Math.sin(w); } return y; });
+    };
+    const cxd = cx.map((x, j) => x - v * j * dt);
+    const vx = lowd(cxd, 1).map(x => x + v), vz = lowd(cz, 1);
+    const ax = lowd(cxd, 2), az = lowd(cz, 2);
+    const Fx = ax, Fz = az.map(a => a + P.g); // 体重1kgあたり（N/kg）
+    // 角運動量（重心まわり、反時計回り＝x から z へ が正）
+    const H = SG.map((sg, j) => {
+      let h = 0;
+      sg.forEach((s, i) => {
+        const jm = (j - 1 + N) % N, jp = (j + 1) % N;
+        const pm = SG[jm][i].p, pp = SG[jp][i].p;
+        const vxs = (pp[0] + (j + 1 >= N ? L : 0) - pm[0] + (j - 1 < 0 ? L : 0)) / (2 * dt);
+        const vzs = (pp[1] - pm[1]) / (2 * dt);
+        const rx = s.p[0] - cx[j], rz = s.p[1] - cz[j];
+        const angm = SG[jm][i].ang, angp = SG[jp][i].ang;
+        h += s.m * (rx * (vzs - vz[j]) - rz * (vxs - vx[j])) + s.I * ((angp - angm) * RAD / (2 * dt));
+      });
+      return h / M;
+    });
+    const dH = lowd(H, 1);
+    // 圧の中心（全体）：(x_p - x_c) Fz + z_c Fx = dH/dt
+    const cop = R.map((s, j) => cx[j] + (dH[j] - cz[j] * Fx[j]) / Fz[j]);
+    // 脚ごとの反力
+    // 上下：全体は重心の上下の加速度から。両脚で支える間の分け方は、実測の平均の反力の割合（両脚支持の進み具合で伸縮）＝m
+    // 前後：各脚の反力は、その脚の接地点（踵・足裏の弧の接点・MTP）から重心を通る向きとみなす（重心まわりの角運動量の変化を0とみなす仮定）＝c
+    const DSn = P.TO - 0.5;
+    const shareLead = s => { const d = D.TO - 0.5, a = fyAt(s * d), b = fyAt(s * d + 0.5); return a / (a + b); };
+    // 一周期で前後の力の和が0（速さが保たれる）になるよう、圧の中心を一律に dCop 前へずらす＝a（調整）
+    const legFz = R.map((s, j) => {
+      const on = [0, 1].filter(k => s.info[k]), out = [0, 0];
+      if (on.length === 1) out[on[0]] = Fz[j];
+      else if (on.length === 2) { const lead = s.ph[0] < s.ph[1] ? 0 : 1, w = shareLead(s.ph[lead] / DSn); out[lead] = w * Fz[j]; out[1 - lead] = (1 - w) * Fz[j]; }
+      return out;
+    });
+    let s1 = 0, s2 = 0;
+    R.forEach((s, j) => [0, 1].forEach(k => { if (s.info[k]) { s1 += legFz[j][k] * (cx[j] - s.info[k].cx) / cz[j]; s2 += legFz[j][k] / cz[j]; } }));
+    const dCop = s1 / s2;
+    const Fleg = R.map((s, j) => {
+      const on = [0, 1].filter(k => s.info[k]);
+      const out = [[0, 0], [0, 0]];
+      const put = (k, fz) => { out[k] = [fz * (cx[j] - s.info[k].cx - dCop) / cz[j], fz]; };
+      if (on.length === 1) put(on[0], Fz[j]);
+      else if (on.length === 2) {
+        const lead = s.ph[0] < s.ph[1] ? 0 : 1, w = shareLead(s.ph[lead] / DSn);
+        put(lead, w * Fz[j]); put(1 - lead, (1 - w) * Fz[j]);
+      }
+      return out;
+    });
+    const FxL = Fleg.map(f => f[0][0] + f[1][0]);
+    // ---- 関節の力（逆動力学：足 → すね → 太もも）。体重1kgあたり ----
+    // 向き：足首は底屈が正、膝は伸展が正、股関節は屈曲が正（実測のデータと同じ向き）。パワーは正が筋の正の仕事
+    const J = [0, 1].map(k => {
+      const segIdx = [1 + 3 * k, 2 + 3 * k, 3 + 3 * k]; // 太もも・すね・足
+      const pos = segIdx.map(i => [SG.map((sg, j) => sg[i].p[0] - v * j * dt), SG.map(sg => sg[i].p[1])]);
+      const acc = pos.map(p => [lowd(p[0], 2), lowd(p[1], 2)]);
+      const angs = [R.map(s => s.A[k].th * RAD), R.map(s => s.A[k].sh * RAD), R.map(s => s.A[k].ft * RAD)];
+      const om = angs.map(a => lowd(a, 1)), al = angs.map(a => lowd(a, 2));
+      const Is = [P.mTh * (P.gTh * P.Lt) ** 2, P.mSh * (P.gSh * P.Ls) ** 2, P.mFt * (P.gFt * Math.hypot(P.mf, P.ha)) ** 2];
+      const ms = [P.mTh, P.mSh, P.mFt];
+      const cr = (r, f) => r[0] * f[1] - r[1] * f[0];
+      const Ma = [], Mk = [], Mh = [], Pa = [], Pk = [], Ph = [];
+      for (let j = 0; j < N; j++) {
+        const g = R[j].legs[k], inf = R[j].info[k];
+        const G = Fleg[j][k], cop = inf ? [inf.cx + dCop, 0] : [0, 0];
+        const P3 = segIdx.map(i => SG[j][i].p);
+        const f = 2, sh = 1, th = 0;
+        // 足
+        const Fa = [ms[f] * acc[f][0][j] - G[0], ms[f] * acc[f][1][j] - G[1] + ms[f] * P.g];
+        const ma = Is[f] * al[f][j] - (inf ? cr([cop[0] - P3[f][0], cop[1] - P3[f][1]], G) : 0) - cr([g.ank[0] - P3[f][0], g.ank[1] - P3[f][1]], Fa);
+        // すね
+        const Fk = [ms[sh] * acc[sh][0][j] + Fa[0], ms[sh] * acc[sh][1][j] + Fa[1] + ms[sh] * P.g];
+        const mk = Is[sh] * al[sh][j] + cr([g.ank[0] - P3[sh][0], g.ank[1] - P3[sh][1]], Fa) + ma - cr([g.knee[0] - P3[sh][0], g.knee[1] - P3[sh][1]], Fk);
+        // 太もも
+        const Fh = [ms[th] * acc[th][0][j] + Fk[0], ms[th] * acc[th][1][j] + Fk[1] + ms[th] * P.g];
+        const mh = Is[th] * al[th][j] + cr([g.knee[0] - P3[th][0], g.knee[1] - P3[th][1]], Fk) + mk - cr([g.hip[0] - P3[th][0], g.hip[1] - P3[th][1]], Fh);
+        // 反時計回りが正の値を、実測の向きにそろえる
+        Ma.push(-ma); Mk.push(mk); Mh.push(mh);
+        Pa.push(ma * (om[f][j] - om[sh][j])); Pk.push(mk * (om[sh][j] - om[th][j])); Ph.push(mh * (om[th][j] - 0));
+      }
+      return { Ma, Mk, Mh, Pa, Pk, Ph };
+    });
+    return { P, roll, R, N, dt, L, v, com, vx, vz, Fx: FxL, FxKin: Fx, dCop, Fz, H, cop, Fleg, J, icErr, maxSlip, minClear, M, swV, pcOf };
+  }
+
+  // ---- 指標 ----
+  function indices(r) {
+    const N = r.N, dt = r.dt, P = r.P;
+    let pos = 0, neg = 0, coll = 0, push = 0, imp = 0;
+    for (let j = 0; j < N; j++) {
+      imp += r.Fx[j] * dt;
+      for (let k = 0; k < 2; k++) {
+        const f = r.Fleg[j][k], pw = f[0] * r.vx[j] + f[1] * r.vz[j];
+        if (pw > 0) pos += pw * dt; else neg += pw * dt;
+        const phk = r.R[j].ph[k];
+        if (phk < 0.15 && pw < 0) coll += pw * dt;                // 接地から15%まで：その脚の負の仕事（衝突）
+        if (phk >= 0.4 && phk < P.TO && pw > 0) push += pw * dt;  // 40%から離地まで：その脚の正の仕事（押し出し）
+      }
+    }
+    const czs = r.com.map(c => c[1]);
+    // 着地の瞬間の踵の速さ（右脚、位相0）
+    const a = r.R[N - 1].legs[0].heel, b = r.R[1].legs[0].heel;
+    const heelV = [(b[0] + r.L - a[0]) / (2 * dt), (b[1] - a[1]) / (2 * dt)];
+    // 両脚支持の間に重心の速さの向きが変わる角度（下向き→上向き）
+    const jd = Math.round((P.TO - 0.5) * N);
+    const ang = j => Math.atan2(r.vz[(j + N) % N], r.vx[(j + N) % N]) / RAD;
+    let lo = 1e9, hi = -1e9; for (let j = -Math.round(0.03 * N); j <= jd + Math.round(0.03 * N); j++) { lo = Math.min(lo, ang(j)); hi = Math.max(hi, ang(j)); }
+    // 関節の仕事（右脚、一周期）
+    const Jw = a => { let p = 0, n = 0; a.forEach(v => { if (v > 0) p += v * dt; else n += v * dt; }); return [p, n]; };
+    const J0 = r.J ? r.J[0] : null;
+    const jw = J0 ? { ank: Jw(J0.Pa), knee: Jw(J0.Pk), hip: Jw(J0.Ph) } : null;
+    // 接地の直前の、足のいちばん低い点の下向きの速さ（衝撃の目安）
+    // 接地で床に触れる足裏の点（足に固定した点）を、接地の直前に追う
+    const f0 = r.R[0].A[0].ft * RAD, q0l = lowPoint(r.R[0].A[0].ft, P), ql = [Math.cos(f0) * q0l[0] + Math.sin(f0) * q0l[1], -Math.sin(f0) * q0l[0] + Math.cos(f0) * q0l[1]];
+    const lpAt = j => { const s = r.R[(j + N) % N], g = s.legs[0], q = rot(s.A[0].ft, ql); return [g.ank[0] + q[0] + (j < 0 ? -r.L : 0), g.ank[1] + q[1]]; };
+    const q1 = lpAt(-2), q0 = lpAt(-1);
+    const impact = [(q0[0] - q1[0]) / dt, (q0[1] - q1[1]) / dt];
+    let thMin = 1e9, ankMax = -1e9, ankMinSt = 1e9;
+    r.R.forEach(s => { const a = s.A[0]; thMin = Math.min(thMin, a.th); if (s.ph[0] < P.TO) { ankMax = Math.max(ankMax, a.ft - a.sh); ankMinSt = Math.min(ankMinSt, a.ft - a.sh); } });
+    return {
+      L: r.L, v: r.v, cadence: 120 / P.T, T: P.T, TO: P.TO, DS: P.TO - 0.5,
+      jw, impactVz: impact[1], impactVx: impact[0], thMin, ankMax,
+      comRange: Math.max(...czs) - Math.min(...czs),
+      fzMax: Math.max(...r.Fz) / P.g, fzMin: Math.min(...r.Fz) / P.g,
+      brake: Math.min(...r.Fx) / P.g, prop: Math.max(...r.Fx) / P.g,
+      posW: pos, negW: neg, posPerM: pos / r.L, coll, push, imp,
+      heelVz: heelV[1], heelVx: heelV[0], redirect: hi - lo,
+      clear: r.minClear, dCop: r.dCop, slip: Math.max(...r.maxSlip), icErr: Math.max(...r.icErr)
+    };
+  }
+
+  return { simulate, indices, angles, pelvis, legDown, lowPoint, P0, D, MODS, four, rot };
+})();
+if (typeof module !== 'undefined') module.exports = KISO;
+
+// 土台の模型：股・膝・足首・MTP の4関節で、正常歩行の歩行周期を再現する
+// 方式：動きを与えて力を計算する（逆動力学）。矢状面。骨盤の回旋と傾きだけ左右の股関節の前後・上下に効かせる。
+// 入力：関節角度（健常な若年成人の平均。Fukuchi ら 2018 の公開データ）＝札 m
+// 結果として出るもの：歩幅・速さ・重心の動き・反力・重心の仕事など
+const KISO_SLOW = (function () {
+  const D = /*DATA*/{"T":1.27,"meas_mh":[-0.3296,-0.3348,-0.3033,-0.2774,-0.2762,-0.2727,-0.2769,-0.3057,-0.3447,-0.3649,-0.3604,-0.3377,-0.3051,-0.2718,-0.244,-0.2213,-0.2015,-0.1817,-0.1589,-0.1328,-0.1072,-0.0834,-0.0615,-0.0412,-0.0205,-0.0001,0.0199,0.0381,0.0531,0.0654,0.0768,0.0879,0.0997,0.1114,0.1217,0.1336,0.1471,0.1622,0.1804,0.2013,0.2241,0.2491,0.2757,0.3035,0.3319,0.3602,0.3878,0.4132,0.435,0.4519,0.4613,0.4612,0.4525,0.4389,0.4238,0.4078,0.3883,0.3637,0.3358,0.3056,0.2717,0.2336,0.1967,0.1599,0.1324,0.1228,0.1343,0.1472,0.1548,0.1478,0.1284,0.1037,0.0812,0.0641,0.0519,0.043,0.0349,0.0277,0.0221,0.0179,0.0146,0.0126,0.0102,0.0074,0.0047,0.0012,-0.0036,-0.0117,-0.0247,-0.0429,-0.0675,-0.098,-0.1317,-0.1662,-0.1992,-0.2246,-0.2419,-0.2586,-0.2733,-0.2574],"meas_mk":[-0.1913,-0.1683,-0.1257,-0.0956,-0.0887,-0.0734,-0.0385,0.0007,0.0335,0.0617,0.0857,0.1051,0.12,0.1302,0.1353,0.1363,0.1341,0.1295,0.1235,0.1161,0.1069,0.0955,0.0815,0.0658,0.0497,0.0338,0.0181,0.0027,-0.013,-0.0294,-0.0462,-0.0633,-0.0805,-0.0978,-0.1154,-0.1324,-0.1489,-0.1647,-0.1797,-0.1934,-0.2052,-0.2144,-0.2206,-0.2231,-0.2215,-0.2154,-0.205,-0.1905,-0.1724,-0.1514,-0.1285,-0.1043,-0.0797,-0.0552,-0.0308,-0.0061,0.0181,0.04,0.0573,0.0685,0.071,0.0641,0.0517,0.0335,0.0169,0.0095,0.0151,0.0243,0.034,0.0376,0.0346,0.0274,0.0192,0.0115,0.0045,-0.002,-0.0083,-0.0145,-0.0206,-0.0263,-0.0316,-0.0361,-0.0401,-0.0436,-0.0466,-0.049,-0.0517,-0.0556,-0.0615,-0.07,-0.0815,-0.0957,-0.1115,-0.128,-0.1447,-0.1596,-0.1721,-0.1839,-0.1912,-0.1763],"meas_ma":[0.0005,-0.0099,-0.0312,-0.0574,-0.077,-0.0855,-0.0843,-0.0754,-0.061,-0.044,-0.0262,-0.008,0.0105,0.0299,0.0509,0.0732,0.0968,0.1216,0.1475,0.1744,0.2021,0.2308,0.2607,0.2917,0.324,0.3575,0.3924,0.4288,0.467,0.5069,0.5485,0.5914,0.6356,0.6807,0.7266,0.7731,0.8199,0.867,0.9144,0.9619,1.0091,1.0557,1.1009,1.144,1.1838,1.2195,1.2498,1.2735,1.2892,1.2957,1.2909,1.2723,1.237,1.1824,1.1074,1.0119,0.8972,0.7661,0.6233,0.4771,0.3368,0.2141,0.1172,0.0488,0.007,-0.0126,-0.02,-0.0213,-0.0199,-0.0175,-0.0149,-0.0127,-0.0113,-0.0103,-0.0097,-0.0094,-0.0094,-0.0096,-0.0099,-0.0103,-0.0108,-0.0115,-0.0123,-0.0131,-0.0139,-0.0148,-0.0155,-0.016,-0.0163,-0.0161,-0.0154,-0.0143,-0.0126,-0.0103,-0.0076,-0.0048,-0.0022,-0.0002,0.0011,0.0011],"prot":[-0.0529,[3.4399,2.8059],[0.0207,-0.0948],[0.3565,-0.2862],[-0.0064,-0.0228],[0.2988,0.2392],[-0.0088,0.0041],[-0.0428,0.0949],[-0.0156,-0.0071],[-0.054,-0.0118],[-0.0106,-0.0111]],"pobl":[0.0039,[2.1442,2.8262],[0.0084,0.0392],[-1.121,-0.0481],[-0.0033,0.0163],[-0.1373,0.0083],[-0.0053,0.0007],[-0.0824,-0.097],[0.0047,-0.0106],[0.0327,-0.0479],[0.0062,0.0032]],"th":[2.8964,[16.6904,-3.3987],[-2.5297,-2.8289],[-0.4591,1.7021],[0.1562,-0.0243],[-0.3095,0.1316],[0.07,0.1155],[-0.0182,-0.0465],[0.0529,0.016],[0.0592,-0.0012],[0.0452,0.0327]],"sh":[-13.8504,[18.5369,18.4569],[11.6162,-4.9114],[0.5635,-3.7029],[0.2578,-0.3934],[0.4302,-0.5244],[-0.0961,-0.301],[-0.0395,-0.0918],[-0.07,-0.0956],[-0.06,-0.0647],[-0.0491,-0.0592]],"ft":[-10.5251,[14.1979,21.0986],[13.2212,-10.5639],[-3.3099,-4.4069],[1.3838,0.9624],[1.19,-1.5451],[-0.1784,-0.1964],[0.556,0.0545],[0.2015,-0.2192],[0.1004,0.0546],[0.1537,0.0421]],"hip":[13.1681,[16.6552,-3.4796],[-1.8392,-2.5882],[-0.4658,1.659],[0.1971,-0.1149],[-0.3049,0.1135],[0.0748,0.1405],[-0.0238,-0.0616],[0.0327,0.0094],[0.0553,-0.0125],[0.0428,0.0279]],"knee":[16.7468,[-1.8465,-21.8556],[-14.1459,2.0825],[-1.0225,5.405],[-0.1016,0.3691],[-0.7397,0.656],[0.1661,0.4165],[0.0213,0.0452],[0.1228,0.1116],[0.1192,0.0636],[0.0943,0.092]],"ank":[3.3252,[-4.339,2.6418],[1.605,-5.6525],[-3.8734,-0.704],[1.126,1.3558],[0.7598,-1.0208],[-0.0823,0.1046],[0.5954,0.1463],[0.2714,-0.1236],[0.1604,0.1194],[0.2028,0.1013]],"TO":0.6427,"meas_fx":[0.0388,0.0427,-0.0344,-0.2205,-0.4357,-0.5971,-0.7076,-0.7952,-0.8605,-0.903,-0.9278,-0.9405,-0.9446,-0.9402,-0.9258,-0.8996,-0.8616,-0.8135,-0.7587,-0.7003,-0.6407,-0.5816,-0.5242,-0.47,-0.4205,-0.3762,-0.3372,-0.3026,-0.2709,-0.2405,-0.2103,-0.1797,-0.1485,-0.1168,-0.0842,-0.0503,-0.0147,0.0236,0.0651,0.1102,0.1593,0.2131,0.2726,0.3384,0.4103,0.4882,0.5718,0.661,0.7556,0.8548,0.9564,1.0562,1.1471,1.2207,1.2689,1.2832,1.2554,1.1786,1.0489,0.8711,0.6592,0.4435,0.2498,0.109,0.0336,0.0067,-0.0015,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"meas_fy":[0.4608,1.3219,2.3464,3.1739,3.7987,4.3141,4.7747,5.2052,5.6351,6.0883,6.5762,7.0972,7.6365,8.1663,8.6517,9.0591,9.3732,9.5928,9.7255,9.7808,9.7666,9.6944,9.5779,9.4339,9.2806,9.1342,9.0071,8.9074,8.8388,8.8011,8.791,8.8029,8.8313,8.8718,8.9215,8.9787,9.043,9.1157,9.1981,9.2912,9.3955,9.5109,9.6348,9.7617,9.8844,9.9938,10.0802,10.1331,10.1417,10.0937,9.9736,9.7616,9.4348,8.9734,8.3692,7.6256,6.7553,5.7795,4.7321,3.6695,2.6535,1.7658,1.0589,0.549,0.2437,0.0842,0.0254,0.0021,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"sd_hip":[6.29,6.38,6.47,6.6,6.78,6.98,7.17,7.36,7.51,7.62,7.68,7.7,7.68,7.66,7.64,7.63,7.65,7.67,7.69,7.7,7.69,7.66,7.62,7.56,7.48,7.39,7.3,7.2,7.11,7.03,6.97,6.93,6.9,6.88,6.87,6.86,6.84,6.82,6.8,6.76,6.73,6.69,6.64,6.6,6.57,6.56,6.56,6.57,6.58,6.6,6.61,6.63,6.66,6.7,6.77,6.84,6.92,6.99,7.04,7.07,7.08,7.09,7.08,7.06,7.03,7,6.96,6.92,6.89,6.85,6.81,6.75,6.69,6.62,6.53,6.44,6.33,6.23,6.14,6.06,6,5.96,5.92,5.88,5.85,5.82,5.79,5.76,5.74,5.72,5.72,5.71,5.71,5.72,5.72,5.76,5.84,5.98,6.17,6.37],"sd_knee":[4.03,4.2,4.36,4.59,4.92,5.3,5.68,6.05,6.38,6.63,6.81,6.93,7.01,7.06,7.08,7.09,7.09,7.06,7.01,6.95,6.87,6.78,6.67,6.55,6.42,6.27,6.1,5.91,5.72,5.53,5.37,5.23,5.12,5.05,5,4.97,4.96,4.96,4.95,4.93,4.9,4.85,4.79,4.73,4.67,4.61,4.57,4.53,4.49,4.47,4.47,4.48,4.5,4.55,4.64,4.75,4.91,5.12,5.38,5.66,5.93,6.16,6.3,6.33,6.24,6.04,5.74,5.35,4.9,4.47,4.13,3.95,3.97,4.17,4.52,4.95,5.43,5.91,6.39,6.84,7.26,7.64,7.95,8.21,8.39,8.51,8.55,8.51,8.38,8.15,7.8,7.31,6.7,5.95,5.14,4.35,3.77,3.58,3.76,4.09],"sd_ank":[3.28,3.29,3.32,3.38,3.43,3.52,3.63,3.71,3.77,3.8,3.83,3.84,3.85,3.85,3.85,3.85,3.83,3.81,3.77,3.73,3.69,3.64,3.59,3.53,3.46,3.39,3.31,3.23,3.15,3.08,3.02,2.96,2.92,2.89,2.88,2.87,2.87,2.87,2.87,2.88,2.87,2.87,2.86,2.86,2.86,2.86,2.87,2.89,2.92,2.96,3,3.05,3.1,3.17,3.25,3.35,3.48,3.63,3.8,3.92,3.94,3.85,3.71,3.65,3.77,4.12,4.71,5.44,6.16,6.76,7.11,7.16,6.94,6.57,6.15,5.74,5.35,4.98,4.62,4.27,3.91,3.56,3.22,2.9,2.63,2.44,2.33,2.29,2.32,2.39,2.5,2.61,2.73,2.87,3.02,3.18,3.34,3.5,3.66,3.81]}/*END*/;
+  const RAD = Math.PI / 180;
+
+  // 値と出所の札：s 検索、m 実測、c 設定、r 再構成（推定）
+  const P0 = {
+    Lt: 0.377,   // m 太もも（大転子→膝の外側のマーカー）。若年20人の平均
+    Ls: 0.403,   // m すね（膝→外くるぶし）
+    ha: 0.065,   // m 足首の高さ（足裏を床に付けた時）
+    hb: 0.043,   // m 踵の点：足首の後ろ（踵のマーカー）
+    mf: 0.150,   // m MTP の点：足首の前（第1中足骨頭のマーカー）
+    toe: 0.05,   // c 足指の長さ（絵だけに使う）
+    eps: 4,      // c 足裏が平らとみなす傾き（度）。この間は足裏の弧で転がる
+    T: (D && D.T) || 1.066, // m 一周期の時間（若年24人のふつうの速さ 1.066 s、マーカーから）
+    TO: null,    // m 離地（周期の割合）。反力から。データの値を使う
+    mHat: 0.678, mTh: 0.100, mSh: 0.0465, mFt: 0.0145, // s 体節の重さの割合（Winter による Dempster の値）
+    cTh: 0.433, cSh: 0.433, cFt: 0.5,                  // s 体節の重心の位置（近い端から）
+    gTh: 0.323, gSh: 0.302, gFt: 0.475,                // s 回転半径（体節の長さに対する割合）
+    W: 0.245,    // r 骨盤の回旋・傾きのてこの幅（上前腸骨棘の間の実測を借用）
+    hatH: 0.35,  // r 上体（頭・腕・胴）の重心：骨盤の中心の上。肩の高さが未確認のため推定
+    g: 9.81
+  };
+
+  function four(c, ph) {
+    let y = c[0];
+    for (let n = 1; n < c.length; n++) {
+      const w = 2 * Math.PI * n * ph;
+      y += c[n][0] * Math.cos(w) + c[n][1] * Math.sin(w);
+    }
+    return y;
+  }
+  const mod1 = x => x - Math.floor(x);
+
+  // ---- 変数を足す口 ----
+  // 各変数は {key, name, legs(a, ph, amt, V) で角度を変える, pelvis(psi, ob, phR, amt, V) で骨盤を変える}
+  const MODS = [];
+  function angles(ph, V) {
+    let a = { th: four(D.th, ph), sh: four(D.sh, ph), ft: four(D.ft, ph) };
+    if (V && V.d) { a.th += four(V.d.th, ph); a.sh += four(V.d.sh, ph); a.ft += four(V.d.ft, ph); } // 変数：角度の変更分（三角級数）
+    for (const m of MODS) if (V && V[m.key] && m.legs) a = m.legs(a, ph, V[m.key], V);
+    return a;
+  }
+  // 骨盤：右脚の位相で。回旋は右が前に出る向き、傾きは右が上がる向きが正
+  function pelvis(phR, V) {
+    let psi = four(D.prot, phR), ob = four(D.pobl, phR);
+    for (const m of MODS) if (V && V[m.key] && m.pelvis) [psi, ob] = m.pelvis(psi, ob, phR, V[m.key], V);
+    return [psi, ob];
+  }
+  function pelvisOff(phR, P, V) {
+    const [psi, ob] = pelvis(phR, V), h = P.W / 2;
+    const dx = h * Math.sin(psi * RAD), dz = h * Math.sin(ob * RAD);
+    return { off: [[dx, dz], [-dx, -dz]], psi, ob };
+  }
+
+  const rot = (ang, p) => { const c = Math.cos(ang * RAD), s = Math.sin(ang * RAD); return [c * p[0] - s * p[1], s * p[0] + c * p[1]]; };
+
+  // ---- 立脚の足の転がり（踵 → 足裏の弧 → MTP）----
+  // 一つの立脚について、接地の踵の位置を 0 としたときの足首の位置を位相の関数として作る
+  function footGeom(P) {
+    const Hl = [-P.hb, -P.ha], Ml = [P.mf, -P.ha];
+    const c = P.hb + P.mf, e = P.eps, R = c / (2 * Math.sin(e * RAD));
+    const Ol = [(Ml[0] + Hl[0]) / 2, -P.ha + R * Math.cos(e * RAD)];
+    return { Hl, Ml, R, Ol, e };
+  }
+  // 足のいちばん低い点（足首からの相対）：踵・足裏の弧の接点・MTP のうち、足の傾きで決まるもの
+  function lowPoint(f, P) {
+    const G = footGeom(P);
+    if (f > G.e) return rot(f, G.Hl);
+    if (f < -G.e) return rot(f, G.Ml);
+    const o = rot(f, G.Ol); return [o[0], o[1] - G.R];
+  }
+  function stanceRoll(P, V) {
+    const { Hl, Ml, R, Ol, e } = footGeom(P);
+    const ft = ph => angles(ph, V).ft;
+    // ±eps を横切る位相を探す
+    const n = 2000, cr = [];
+    for (let i = 0; i < n; i++) {
+      const a = i / n * P.TO, b = (i + 1) / n * P.TO;
+      for (const th of [e, -e]) {
+        let fa = ft(a) - th, fb = ft(b) - th;
+        if (fa === 0 || fa * fb < 0) {
+          let lo = a, hi = b;
+          for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2, fm = ft(m) - th; if (fa * fm <= 0) hi = m; else { lo = m; fa = fm; } }
+          cr.push({ ph: (lo + hi) / 2, th });
+        }
+      }
+    }
+    cr.sort((u, w) => u.ph - w.ph);
+    const f0 = ft(0);
+    let seg = { from: 0, mode: f0 > e ? 'heel' : f0 < -e ? 'mtp' : 'arc', x: 0, fe: f0 };
+    const segs = [seg];
+    const contactX = (s, f) => s.mode === 'arc' ? s.x - R * (f - s.fe) * RAD : s.x;
+    for (const k of cr) {
+      const cur = segs[segs.length - 1];
+      let mode;
+      if (cur.mode === 'heel' && k.th === e) mode = 'arc';
+      else if (cur.mode === 'mtp' && k.th === -e) mode = 'arc';
+      else if (cur.mode === 'arc') mode = k.th === e ? 'heel' : 'mtp';
+      else continue;
+      const x = contactX(cur, k.th);
+      segs.push({ from: k.ph, mode, x, fe: k.th });
+    }
+    function at(ph) {
+      let s = segs[0];
+      for (const q of segs) if (q.from <= ph) s = q;
+      const f = ft(ph);
+      let ank;
+      if (s.mode === 'heel') { const p = rot(f, Hl); ank = [s.x - p[0], -p[1]]; }
+      else if (s.mode === 'mtp') { const p = rot(f, Ml); ank = [s.x - p[0], -p[1]]; }
+      else { const p = rot(f, Ol); ank = [contactX(s, f) - p[0], R - p[1]]; }
+      return { ank, mode: s.mode, contact: s.mode === 'heel' ? s.x : s.mode === 'mtp' ? s.x : contactX(s, f) };
+    }
+    return { at, segs, R };
+  }
+
+  function legDown(hip, a, P) {
+    const knee = [hip[0] + P.Lt * Math.sin(a.th * RAD), hip[1] - P.Lt * Math.cos(a.th * RAD)];
+    const ank = [knee[0] + P.Ls * Math.sin(a.sh * RAD), knee[1] - P.Ls * Math.cos(a.sh * RAD)];
+    const h = rot(a.ft, [-P.hb, -P.ha]), m = rot(a.ft, [P.mf, -P.ha]);
+    return { hip, knee, ank, heel: [ank[0] + h[0], ank[1] + h[1]], mtp: [ank[0] + m[0], ank[1] + m[1]] };
+  }
+  // 足首から上へ：股関節の位置
+  function hipUp(ank, a, P) {
+    const knee = [ank[0] - P.Ls * Math.sin(a.sh * RAD), ank[1] + P.Ls * Math.cos(a.sh * RAD)];
+    return [knee[0] - P.Lt * Math.sin(a.th * RAD), knee[1] + P.Lt * Math.cos(a.th * RAD)];
+  }
+
+  // 5次のエルミート補間（位置・速さ・加速度を両端でつなぐ）
+  function quintic(p0, v0, a0, p1, v1, a1, h) {
+    const c0 = p0, c1 = v0 * h, c2 = a0 * h * h / 2;
+    const c3 = -10 * p0 - 6 * v0 * h - 1.5 * a0 * h * h + 10 * p1 - 4 * v1 * h + 0.5 * a1 * h * h;
+    const c4 = 15 * p0 + 8 * v0 * h + 1.5 * a0 * h * h - 15 * p1 + 7 * v1 * h - a1 * h * h;
+    const c5 = -6 * p0 - 3 * v0 * h - 0.5 * a0 * h * h + 6 * p1 - 3 * v1 * h + 0.5 * a1 * h * h;
+    return s => c0 + s * (c1 + s * (c2 + s * (c3 + s * (c4 + s * c5))));
+  }
+
+  function simulate(V, opt) {
+    const P = Object.assign({}, P0, { TO: (V && V.TO) || D.TO }, opt || {});
+    const N = (opt && opt.N) || 600, dt = P.T / N;
+    const DS = P.TO - 0.5;
+    const roll = stanceRoll(P, V);
+    // 脚 k（0 右、1 左）の位相 phk の立脚から求めた骨盤の中心（その脚の接地の踵を 0 とする）
+    const pcRel = (k, phk) => {
+      const a = angles(phk, V), r = roll.at(phk);
+      const hip = hipUp(r.ank, a, P);
+      const phR = k === 0 ? phk : mod1(phk + 0.5);
+      const o = pelvisOff(phR, P, V).off[k];
+      return [hip[0] - o[0], hip[1] - o[1]];
+    };
+    const derivs = (k, phk) => { // 位置・速さ・加速度（時間で）
+      const h = 1e-4;
+      const p = pcRel(k, phk), pp = pcRel(k, phk + h), pm = pcRel(k, phk - h);
+      return [0, 1].map(j => [p[j], (pp[j] - pm[j]) / (2 * h * P.T), (pp[j] - 2 * p[j] + pm[j]) / (h * h * P.T * P.T)]);
+    };
+    // 接地の踵の位置：その時の骨盤から脚を下ろして求める
+    const heelAtIC = (k, pc, phR) => {
+      const o = pelvisOff(phR, P, V).off[k];
+      const a0 = angles(0, V), g = legDown([pc[0] + o[0], pc[1] + o[1]], a0, P), lp = lowPoint(a0.ft, P);
+      return [g.ank[0] + lp[0], g.ank[1] + lp[1]]; // 接地の点（踵・足裏・MTP）
+    };
+    // 一周期：右の接地を x=0
+    const XR = 0;
+    const pcAt05 = (() => { const p = pcRel(0, 0.5); return [XR + p[0], p[1]]; })();
+    const hL = heelAtIC(1, pcAt05, 0.5);
+    const XL = hL[0];
+    const pcAt1 = (() => { const p = pcRel(1, 0.5); return [XL + p[0], p[1]]; })();
+    const hR2 = heelAtIC(0, pcAt1, 0);
+    const L = hR2[0] - XR;   // 重複歩距離（歩幅2つ分）
+    const icErr = [hL[1], hR2[1]];
+    // 両脚支持の間の骨盤：直前の立脚から求めた動きと、次の立脚から求めた動きを5次式でつなぐ
+    const bridge = (kTrail, Xtrail, kLead, Xlead) => {
+      const a = derivs(kTrail, 0.5), b = derivs(kLead, DS), h = DS * P.T;
+      const f = [0, 1].map(j => quintic(
+        (j === 0 ? Xtrail : 0) + a[j][0], a[j][1] * h, a[j][2] * h * h,
+        (j === 0 ? Xlead : 0) + b[j][0], b[j][1] * h, b[j][2] * h * h, 1).bind(null));
+      // quintic(p0,v0*h,...) を h=1 の正規化で使う
+      return s => [f[0](s), f[1](s)];
+    };
+    // 橋渡しの長さ（位相）。既定は両脚支持の全体
+    const BW = Math.min((opt && opt.bw) || 0.02, DS); // c 前の脚へ乗り移る橋渡しの長さ（周期の2%）
+    const bridge2 = (kTrail, Xtrail, kLead, Xlead) => {
+      const a = derivs(kTrail, 0.5), b = derivs(kLead, BW), h = BW * P.T;
+      const f = [0, 1].map(j => quintic(
+        (j === 0 ? Xtrail : 0) + a[j][0], a[j][1] * h, a[j][2] * h * h,
+        (j === 0 ? Xlead : 0) + b[j][0], b[j][1] * h, b[j][2] * h * h, 1));
+      return s => [f[0](s), f[1](s)];
+    };
+    // 乗り移りの食い違い：後ろの脚から決めた骨盤の速さ（後ろ脚の位相0.5）と、前の脚から決めた骨盤の速さ（前脚の接地）
+    const brA = bridge2(1, XL - L, 0, XR);   // 位相 0〜BW：左が後ろ、右が前
+    const brC = bridge2(0, XR, 1, XL);       // 位相 0.5〜0.5+BW：右が後ろ、左が前
+    // 乗り移りの食い違い：後ろの脚から決めた骨盤の速さ（後ろ脚の位相0.5）と、前の脚から決めた骨盤の速さ（橋渡しの終わり）。差 dv が大きいと着地で骨盤が急に止まる・跳ねる
+    const swV = (() => { const a = derivs(1, 0.5), b = derivs(0, BW); return { trail: [a[0][1], a[1][1]], lead: [b[0][1], b[1][1]], dv: [b[0][1] - a[0][1], b[1][1] - a[1][1]] }; })();
+    const dsMode = (opt && opt.ds) || 'quintic';
+    const fyAt = p => { const q = mod1(p) * 100, i = Math.floor(q), f = q - i; return D.meas_fy[i % 100] * (1 - f) + D.meas_fy[(i + 1) % 100] * f; };
+    const wOf = s => {
+      if (dsMode === 'smooth') return s * s * (3 - 2 * s);
+      const a = fyAt(s * DS), b = fyAt(s * DS + 0.5); return a / (a + b); // m 実測の反力の割合（前の脚の分）
+    };
+    const blend = (kT, XT, phT, kL, XLd, phL, s) => {
+      const t = pcRel(kT, phT), l = pcRel(kL, phL), w = wOf(s);
+      return [(1 - w) * (XT + t[0]) + w * (XLd + l[0]), (1 - w) * t[1] + w * l[1]];
+    };
+    const pcOf = phR => {
+      if (dsMode !== 'quintic') {
+        if (phR < DS) return blend(1, XL - L, phR + 0.5, 0, XR, phR, phR / DS);
+        if (phR >= 0.5 && phR < 0.5 + DS) return blend(0, XR, phR, 1, XL, phR - 0.5, (phR - 0.5) / DS);
+      }
+      if (phR < BW) return brA(phR / BW);
+      if (phR < 0.5) { const p = pcRel(0, phR); return [XR + p[0], p[1]]; }
+      if (phR >= 0.5 && phR < 0.5 + BW) return brC((phR - 0.5) / BW);
+      const p = pcRel(1, phR - 0.5); return [XL + p[0], p[1]];
+    };
+    // 一周期の記録
+    const R = [];
+    let maxSlip = [0, 0], minClear = 1;
+    for (let i = 0; i < N; i++) {
+      const phR = i / N, ph = [phR, mod1(phR + 0.5)];
+      const pc = pcOf(phR);
+      const po = pelvisOff(phR, P, V);
+      const A = ph.map(p => angles(p, V));
+      const hips = [0, 1].map(k => [pc[0] + po.off[k][0], pc[1] + po.off[k][1]]);
+      const legs = A.map((a, k) => legDown(hips[k], a, P));
+      const stance = ph.map(p => p < P.TO);
+      const X = [XR, phR < 0.5 ? XL - L : XL];
+      const info = [0, 1].map(k => {
+        if (!stance[k]) return null;
+        const r = roll.at(ph[k]);
+        // 足の離れ（模型の閉じない誤差）
+        const want = [X[k] + r.ank[0], r.ank[1]];
+        const e = Math.hypot(legs[k].ank[0] - want[0], legs[k].ank[1] - want[1]);
+        maxSlip[k] = Math.max(maxSlip[k], e);
+        return { mode: r.mode, cx: X[k] + r.contact, err: e };
+      });
+      // 遊脚のつま先の高さ（足指はまっすぐ）
+      for (let k = 0; k < 2; k++) if (!stance[k] && ph[k] > P.TO + 0.05 && ph[k] < 0.98) {
+        minClear = Math.min(minClear, legs[k].mtp[1], legs[k].heel[1]); // 遊脚の MTP と踵の高さ
+      }
+      R.push({ phR, ph, pc, psi: po.psi, ob: po.ob, A, legs, stance, info });
+    }
+    if (opt && opt.kin) return { P, roll, R, N, dt, L, icErr, maxSlip, minClear, XL, swV, pcOf };
+    // 右の足の位置を一周期で閉じる（左の接地 XL は右から L/2 前後）
+    // ---- 重心と角運動量 ----
+    const M = P.mHat + 2 * (P.mTh + P.mSh + P.mFt);
+    const segs = s => {
+      const out = [{ m: P.mHat, p: [s.pc[0], s.pc[1] + P.hatH], I: 0, ang: 0 }];
+      s.legs.forEach((g, k) => {
+        const a = s.A[k];
+        out.push({ m: P.mTh, p: [g.hip[0] + P.cTh * (g.knee[0] - g.hip[0]), g.hip[1] + P.cTh * (g.knee[1] - g.hip[1])], I: P.mTh * (P.gTh * P.Lt) ** 2, ang: a.th });
+        out.push({ m: P.mSh, p: [g.knee[0] + P.cSh * (g.ank[0] - g.knee[0]), g.knee[1] + P.cSh * (g.ank[1] - g.knee[1])], I: P.mSh * (P.gSh * P.Ls) ** 2, ang: a.sh });
+        out.push({ m: P.mFt, p: [g.ank[0] + P.cFt * (g.mtp[0] - g.ank[0]), g.ank[1] + P.cFt * (g.mtp[1] - g.ank[1])], I: P.mFt * (P.gFt * Math.hypot(P.mf, P.ha)) ** 2, ang: a.ft });
+      });
+      return out;
+    };
+    const SG = R.map(segs);
+    const v = L / P.T;
+    const per = (j, arr, isX) => { // 周期の添字
+      const q = ((j % N) + N) % N, wrap = Math.floor(j / N);
+      return arr[q] + (isX ? wrap * L : 0);
+    };
+    const com = SG.map(sg => { let x = 0, z = 0; sg.forEach(s => { x += s.m * s.p[0]; z += s.m * s.p[1]; }); return [x / M, z / M]; });
+    const cx = com.map(c => c[0]), cz = com.map(c => c[1]);
+    // 周期信号を三角級数にして微分する。高い次数ほど弱める（ガウスの重み、c：sig 次で 0.61 倍）
+    const sig = (opt && opt.sig) || 4, K = Math.ceil(sig * 4);
+    const lowd = (arr, order) => {
+      const a = [], b = [];
+      for (let n = 0; n <= K; n++) { let sa = 0, sb = 0; for (let j = 0; j < N; j++) { const w = 2 * Math.PI * n * j / N; sa += arr[j] * Math.cos(w); sb += arr[j] * Math.sin(w); } const gw = Math.exp(-0.5 * (n / sig) ** 2); a.push(gw * sa * (n ? 2 : 1) / N); b.push(gw * sb * 2 / N); }
+      return arr.map((_, j) => { let y = order === 0 ? a[0] : 0; for (let n = 1; n <= K; n++) { const om = 2 * Math.PI * n / P.T, w = 2 * Math.PI * n * j / N; let c = a[n], d = b[n]; // y = c cos + d sin
+          for (let o = 0; o < order; o++) { const c2 = d * om, d2 = -c * om; c = c2; d = d2; }
+          y += c * Math.cos(w) + d * Math.sin(w); } return y; });
+    };
+    const cxd = cx.map((x, j) => x - v * j * dt);
+    const vx = lowd(cxd, 1).map(x => x + v), vz = lowd(cz, 1);
+    const ax = lowd(cxd, 2), az = lowd(cz, 2);
+    const Fx = ax, Fz = az.map(a => a + P.g); // 体重1kgあたり（N/kg）
+    // 角運動量（重心まわり、反時計回り＝x から z へ が正）
+    const H = SG.map((sg, j) => {
+      let h = 0;
+      sg.forEach((s, i) => {
+        const jm = (j - 1 + N) % N, jp = (j + 1) % N;
+        const pm = SG[jm][i].p, pp = SG[jp][i].p;
+        const vxs = (pp[0] + (j + 1 >= N ? L : 0) - pm[0] + (j - 1 < 0 ? L : 0)) / (2 * dt);
+        const vzs = (pp[1] - pm[1]) / (2 * dt);
+        const rx = s.p[0] - cx[j], rz = s.p[1] - cz[j];
+        const angm = SG[jm][i].ang, angp = SG[jp][i].ang;
+        h += s.m * (rx * (vzs - vz[j]) - rz * (vxs - vx[j])) + s.I * ((angp - angm) * RAD / (2 * dt));
+      });
+      return h / M;
+    });
+    const dH = lowd(H, 1);
+    // 圧の中心（全体）：(x_p - x_c) Fz + z_c Fx = dH/dt
+    const cop = R.map((s, j) => cx[j] + (dH[j] - cz[j] * Fx[j]) / Fz[j]);
+    // 脚ごとの反力
+    // 上下：全体は重心の上下の加速度から。両脚で支える間の分け方は、実測の平均の反力の割合（両脚支持の進み具合で伸縮）＝m
+    // 前後：各脚の反力は、その脚の接地点（踵・足裏の弧の接点・MTP）から重心を通る向きとみなす（重心まわりの角運動量の変化を0とみなす仮定）＝c
+    const DSn = P.TO - 0.5;
+    const shareLead = s => { const d = D.TO - 0.5, a = fyAt(s * d), b = fyAt(s * d + 0.5); return a / (a + b); };
+    // 一周期で前後の力の和が0（速さが保たれる）になるよう、圧の中心を一律に dCop 前へずらす＝a（調整）
+    const legFz = R.map((s, j) => {
+      const on = [0, 1].filter(k => s.info[k]), out = [0, 0];
+      if (on.length === 1) out[on[0]] = Fz[j];
+      else if (on.length === 2) { const lead = s.ph[0] < s.ph[1] ? 0 : 1, w = shareLead(s.ph[lead] / DSn); out[lead] = w * Fz[j]; out[1 - lead] = (1 - w) * Fz[j]; }
+      return out;
+    });
+    let s1 = 0, s2 = 0;
+    R.forEach((s, j) => [0, 1].forEach(k => { if (s.info[k]) { s1 += legFz[j][k] * (cx[j] - s.info[k].cx) / cz[j]; s2 += legFz[j][k] / cz[j]; } }));
+    const dCop = s1 / s2;
+    const Fleg = R.map((s, j) => {
+      const on = [0, 1].filter(k => s.info[k]);
+      const out = [[0, 0], [0, 0]];
+      const put = (k, fz) => { out[k] = [fz * (cx[j] - s.info[k].cx - dCop) / cz[j], fz]; };
+      if (on.length === 1) put(on[0], Fz[j]);
+      else if (on.length === 2) {
+        const lead = s.ph[0] < s.ph[1] ? 0 : 1, w = shareLead(s.ph[lead] / DSn);
+        put(lead, w * Fz[j]); put(1 - lead, (1 - w) * Fz[j]);
+      }
+      return out;
+    });
+    const FxL = Fleg.map(f => f[0][0] + f[1][0]);
+    // ---- 関節の力（逆動力学：足 → すね → 太もも）。体重1kgあたり ----
+    // 向き：足首は底屈が正、膝は伸展が正、股関節は屈曲が正（実測のデータと同じ向き）。パワーは正が筋の正の仕事
+    const J = [0, 1].map(k => {
+      const segIdx = [1 + 3 * k, 2 + 3 * k, 3 + 3 * k]; // 太もも・すね・足
+      const pos = segIdx.map(i => [SG.map((sg, j) => sg[i].p[0] - v * j * dt), SG.map(sg => sg[i].p[1])]);
+      const acc = pos.map(p => [lowd(p[0], 2), lowd(p[1], 2)]);
+      const angs = [R.map(s => s.A[k].th * RAD), R.map(s => s.A[k].sh * RAD), R.map(s => s.A[k].ft * RAD)];
+      const om = angs.map(a => lowd(a, 1)), al = angs.map(a => lowd(a, 2));
+      const Is = [P.mTh * (P.gTh * P.Lt) ** 2, P.mSh * (P.gSh * P.Ls) ** 2, P.mFt * (P.gFt * Math.hypot(P.mf, P.ha)) ** 2];
+      const ms = [P.mTh, P.mSh, P.mFt];
+      const cr = (r, f) => r[0] * f[1] - r[1] * f[0];
+      const Ma = [], Mk = [], Mh = [], Pa = [], Pk = [], Ph = [];
+      for (let j = 0; j < N; j++) {
+        const g = R[j].legs[k], inf = R[j].info[k];
+        const G = Fleg[j][k], cop = inf ? [inf.cx + dCop, 0] : [0, 0];
+        const P3 = segIdx.map(i => SG[j][i].p);
+        const f = 2, sh = 1, th = 0;
+        // 足
+        const Fa = [ms[f] * acc[f][0][j] - G[0], ms[f] * acc[f][1][j] - G[1] + ms[f] * P.g];
+        const ma = Is[f] * al[f][j] - (inf ? cr([cop[0] - P3[f][0], cop[1] - P3[f][1]], G) : 0) - cr([g.ank[0] - P3[f][0], g.ank[1] - P3[f][1]], Fa);
+        // すね
+        const Fk = [ms[sh] * acc[sh][0][j] + Fa[0], ms[sh] * acc[sh][1][j] + Fa[1] + ms[sh] * P.g];
+        const mk = Is[sh] * al[sh][j] + cr([g.ank[0] - P3[sh][0], g.ank[1] - P3[sh][1]], Fa) + ma - cr([g.knee[0] - P3[sh][0], g.knee[1] - P3[sh][1]], Fk);
+        // 太もも
+        const Fh = [ms[th] * acc[th][0][j] + Fk[0], ms[th] * acc[th][1][j] + Fk[1] + ms[th] * P.g];
+        const mh = Is[th] * al[th][j] + cr([g.knee[0] - P3[th][0], g.knee[1] - P3[th][1]], Fk) + mk - cr([g.hip[0] - P3[th][0], g.hip[1] - P3[th][1]], Fh);
+        // 反時計回りが正の値を、実測の向きにそろえる
+        Ma.push(-ma); Mk.push(mk); Mh.push(mh);
+        Pa.push(ma * (om[f][j] - om[sh][j])); Pk.push(mk * (om[sh][j] - om[th][j])); Ph.push(mh * (om[th][j] - 0));
+      }
+      return { Ma, Mk, Mh, Pa, Pk, Ph };
+    });
+    return { P, roll, R, N, dt, L, v, com, vx, vz, Fx: FxL, FxKin: Fx, dCop, Fz, H, cop, Fleg, J, icErr, maxSlip, minClear, M, swV, pcOf };
+  }
+
+  // ---- 指標 ----
+  function indices(r) {
+    const N = r.N, dt = r.dt, P = r.P;
+    let pos = 0, neg = 0, coll = 0, push = 0, imp = 0;
+    for (let j = 0; j < N; j++) {
+      imp += r.Fx[j] * dt;
+      for (let k = 0; k < 2; k++) {
+        const f = r.Fleg[j][k], pw = f[0] * r.vx[j] + f[1] * r.vz[j];
+        if (pw > 0) pos += pw * dt; else neg += pw * dt;
+        const phk = r.R[j].ph[k];
+        if (phk < 0.15 && pw < 0) coll += pw * dt;                // 接地から15%まで：その脚の負の仕事（衝突）
+        if (phk >= 0.4 && phk < P.TO && pw > 0) push += pw * dt;  // 40%から離地まで：その脚の正の仕事（押し出し）
+      }
+    }
+    const czs = r.com.map(c => c[1]);
+    // 着地の瞬間の踵の速さ（右脚、位相0）
+    const a = r.R[N - 1].legs[0].heel, b = r.R[1].legs[0].heel;
+    const heelV = [(b[0] + r.L - a[0]) / (2 * dt), (b[1] - a[1]) / (2 * dt)];
+    // 両脚支持の間に重心の速さの向きが変わる角度（下向き→上向き）
+    const jd = Math.round((P.TO - 0.5) * N);
+    const ang = j => Math.atan2(r.vz[(j + N) % N], r.vx[(j + N) % N]) / RAD;
+    let lo = 1e9, hi = -1e9; for (let j = -Math.round(0.03 * N); j <= jd + Math.round(0.03 * N); j++) { lo = Math.min(lo, ang(j)); hi = Math.max(hi, ang(j)); }
+    // 関節の仕事（右脚、一周期）
+    const Jw = a => { let p = 0, n = 0; a.forEach(v => { if (v > 0) p += v * dt; else n += v * dt; }); return [p, n]; };
+    const J0 = r.J ? r.J[0] : null;
+    const jw = J0 ? { ank: Jw(J0.Pa), knee: Jw(J0.Pk), hip: Jw(J0.Ph) } : null;
+    // 接地の直前の、足のいちばん低い点の下向きの速さ（衝撃の目安）
+    // 接地で床に触れる足裏の点（足に固定した点）を、接地の直前に追う
+    const f0 = r.R[0].A[0].ft * RAD, q0l = lowPoint(r.R[0].A[0].ft, P), ql = [Math.cos(f0) * q0l[0] + Math.sin(f0) * q0l[1], -Math.sin(f0) * q0l[0] + Math.cos(f0) * q0l[1]];
+    const lpAt = j => { const s = r.R[(j + N) % N], g = s.legs[0], q = rot(s.A[0].ft, ql); return [g.ank[0] + q[0] + (j < 0 ? -r.L : 0), g.ank[1] + q[1]]; };
+    const q1 = lpAt(-2), q0 = lpAt(-1);
+    const impact = [(q0[0] - q1[0]) / dt, (q0[1] - q1[1]) / dt];
+    let thMin = 1e9, ankMax = -1e9, ankMinSt = 1e9;
+    r.R.forEach(s => { const a = s.A[0]; thMin = Math.min(thMin, a.th); if (s.ph[0] < P.TO) { ankMax = Math.max(ankMax, a.ft - a.sh); ankMinSt = Math.min(ankMinSt, a.ft - a.sh); } });
+    return {
+      L: r.L, v: r.v, cadence: 120 / P.T, T: P.T, TO: P.TO, DS: P.TO - 0.5,
+      jw, impactVz: impact[1], impactVx: impact[0], thMin, ankMax,
+      comRange: Math.max(...czs) - Math.min(...czs),
+      fzMax: Math.max(...r.Fz) / P.g, fzMin: Math.min(...r.Fz) / P.g,
+      brake: Math.min(...r.Fx) / P.g, prop: Math.max(...r.Fx) / P.g,
+      posW: pos, negW: neg, posPerM: pos / r.L, coll, push, imp,
+      heelVz: heelV[1], heelVx: heelV[0], redirect: hi - lo,
+      clear: r.minClear, dCop: r.dCop, slip: Math.max(...r.maxSlip), icErr: Math.max(...r.icErr)
+    };
+  }
+
+  return { simulate, indices, angles, pelvis, legDown, lowPoint, P0, D, MODS, four, rot };
+})();
+if (typeof module !== 'undefined') module.exports = KISO_SLOW;
+
+</script>
+<script>
+const VARS = /*VARS*/{"A":{"which":"A","TO":0.6221,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.732,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":10,"d":{"th":[-5.0455,[-3.9811,0.7092],[3.3149,3.2899],[0.3204,0.004],[-0.1658,0.8135],[0.2641,-0.0291],[0.0458,0.1263],[0.0086,0.0075]],"sh":[-1.09,[-12.7998,-7.9206],[-8.3977,1.5073],[0.6947,1.194],[0.6951,-2.3236],[-1.1879,-0.1823],[0.0282,0.1423],[0.0421,-0.0041]],"ft":[7.7996,[-12.0342,-19.5996],[-14.6711,11.2014],[4.0096,2.614],[-2.5615,-0.5322],[-2.0401,1.4368],[-0.141,0.4049],[-0.3394,0.336]]},"viol":{"mm":0,"deg":0,"ms":0,"worst":"swingFlat"}},"B":{"which":"B","TO":0.51,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":1.234,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":10,"d":{"th":[1.7019,[1.7965,-3.5036],[0.3711,1.541],[-0.2021,-0.9255],[-1.3474,0.9677],[0.1681,-0.1417],[-0.3403,-0.2351],[0.054,0.3133]],"sh":[-2.4567,[1.2396,2.5858],[-0.3582,-2.2713],[-2.2647,-0.2133],[0.6887,0.3413],[-0.1699,-0.5037],[0.1101,0.4035],[0.0024,0.005]],"ft":[3.5372,[-3.7915,-4.6495],[-0.77,4.5266],[2.4645,-2.1679],[-1.4484,-1.2262],[-0.2064,0.7825],[-0.0738,-0.1881],[-0.1683,0.0586]]},"viol":{"mm":0,"deg":0,"ms":0,"worst":"nokick"}},"AB":{"HOLDT":0.31,"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"KR":10,"d":{"th":[1.9594,[-2.6067,8.9601],[4.1261,-4.2233],[-1.07,-2.3922],[0.652,-0.1506],[-1.4043,-0.3185],[0.3826,-0.1423],[0.0202,0.3082],[-0.1269,0.1429],[-0.0097,-0.0286]],"sh":[-4.5473,[-9.3847,-12.1778],[-7.1925,5.4388],[1.0676,1.8864],[-1.0178,0.0713],[0.8479,0.408],[0.4594,0.1398],[0.6155,-0.2745],[0.0636,-0.0202],[0.0483,-0.0443]],"ft":[9.0379,[-13.9084,-20.077],[-13.6929,11.4993],[3.6575,2.1197],[-3.8137,0.2081],[-0.0093,2.0227],[-0.5503,-0.3369],[-0.4275,-0.0688],[-0.125,0.0237],[-0.1491,-0.0062]]},"viol":{"mm":0.1,"deg":0.1,"ms":0.001,"worst":"knee","drop":0.5,"tp":26}},"ABV":{"10s":{"which":"AB","TO":0.51,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":10,"d":{"th":[-1.6838,[0.9496,3.692],[6.1025,-0.6369],[-2.0207,-1.8193],[0.5495,-0.5395],[-1.6305,-0.2183],[-0.1742,-0.3543],[-0.0937,0.0709]],"sh":[-3.9099,[-10.9549,-11.7623],[-8.3984,3.517],[1.6368,1.7288],[-0.4772,-0.4712],[0.1576,0.1124],[0.0297,0.2298],[0.2465,0.0163]],"ft":[9.167,[-14.3575,-19.8769],[-14.006,11.1085],[3.6701,2.3239],[-4.1898,0.3267],[-0.1726,2.6044],[-0.072,0.1902],[-0.2463,0.2682]]},"viol":{"mm":0.5,"deg":0.1,"ms":0.002,"worst":"hover"}},"10c":{"HOLDT":0.31,"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"KR":10,"d":{"th":[1.9594,[-2.6067,8.9601],[4.1261,-4.2233],[-1.07,-2.3922],[0.652,-0.1506],[-1.4043,-0.3185],[0.3826,-0.1423],[0.0202,0.3082],[-0.1269,0.1429],[-0.0097,-0.0286]],"sh":[-4.5473,[-9.3847,-12.1778],[-7.1925,5.4388],[1.0676,1.8864],[-1.0178,0.0713],[0.8479,0.408],[0.4594,0.1398],[0.6155,-0.2745],[0.0636,-0.0202],[0.0483,-0.0443]],"ft":[9.0379,[-13.9084,-20.077],[-13.6929,11.4993],[3.6575,2.1197],[-3.8137,0.2081],[-0.0093,2.0227],[-0.5503,-0.3369],[-0.4275,-0.0688],[-0.125,0.0237],[-0.1491,-0.0062]]},"viol":{"mm":0.1,"deg":0.1,"ms":0.001,"worst":"knee","drop":0.5,"tp":26}},"15s":{"which":"AB","TO":0.51,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":15,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":15,"d":{"th":[-1.3341,[1.1216,4.2096],[5.4712,-1.1448],[-2.38,-1.8247],[0.526,-0.56],[-2.0451,-0.2394],[-0.0067,-0.5226],[-0.2606,0.0555]],"sh":[-4.5573,[-11.1134,-11.7513],[-7.7435,3.452],[1.9213,1.7284],[-0.1914,-0.1932],[0.4317,0.157],[0.3012,0.6353],[0.5841,0.0179]],"ft":[9.1945,[-14.1254,-19.8722],[-14.1103,10.8065],[3.5992,2.251],[-4.3167,0.5238],[-0.1216,2.4824],[-0.1179,0.3133],[-0.2097,0.2678]]},"viol":{"mm":0.7,"deg":0.1,"ms":0.003,"worst":"nokick"}},"15c":{"HOLDT":0.37,"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":15,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"KR":15,"d":{"th":[4.6912,[-3.5579,9.4855],[5.1532,-6.619],[-1.072,-2.6735],[-0.775,0.3005],[-0.3466,-0.5461],[0.227,-0.0216],[-0.0563,0.1235],[-0.3382,0.2955],[-0.2955,0.0501]],"sh":[-5.1266,[-7.7228,-12.3586],[-7.4126,7.0975],[0.7817,1.4035],[-0.4475,-0.1714],[0.0454,0.8107],[0.5714,0.2591],[0.6985,-0.1599],[-0.0624,-0.0594],[-0.1223,-0.2188]],"ft":[8.687,[-13.8854,-20.5313],[-13.2978,12.8349],[3.7604,1.4056],[-3.1455,0.0999],[-0.451,1.9176],[-0.3083,-0.6357],[-0.3432,-0.0882],[-0.5251,-0.1145],[-0.4676,-0.15]]},"viol":{"mm":0.1,"deg":0,"ms":0.001,"worst":"knee","drop":0.9,"tp":38}},"20s":{"which":"AB","TO":0.51,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":20,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":20,"d":{"th":[-1.5436,[1.0302,5.999],[5.3459,-1.175],[-2.3425,-1.9212],[0.9047,-0.9883],[-1.5373,-0.557],[-0.6731,-0.1612],[-1.1721,0.0075]],"sh":[-5.0211,[-11.6881,-12.0727],[-7.294,2.5141],[2.1945,1.5655],[-0.106,-0.6119],[0.9086,0.2299],[0.5745,0.4776],[0.6921,0.0169]],"ft":[9.2323,[-14.0874,-19.7195],[-13.8403,10.812],[4.0999,2.166],[-4.3281,-0.0418],[-0.0716,2.0831],[-0.7074,0.1408],[-0.2862,0.5288]]},"viol":{"mm":0.7,"deg":0.5,"ms":0.007,"worst":"knee"}},"20c":{"HOLDT":0.4,"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":20,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"KR":20,"d":{"th":[5.5816,[-4.2954,11.1288],[7.1347,-8.7668],[-1.7088,-3.6683],[-2.2055,0.8827],[0.4071,0.1429],[0.8062,-0.2104],[-0.0295,-0.1799],[-0.9274,0.7066],[0.152,-0.0138]],"sh":[-5.2263,[-7.1374,-12.0828],[-7.9213,9.2011],[1.2407,1.4483],[0.1563,-0.3941],[-0.497,0.7828],[0.1891,0.6241],[0.7088,0.2136],[0.2539,-0.2502],[-0.3114,-0.3084]],"ft":[8.7878,[-13.9074,-20.8151],[-13.3968,13.4928],[3.9956,1.0872],[-2.7728,-0.2162],[-1.1114,1.6837],[-0.4375,-0.2047],[-0.1544,0.2826],[-0.2613,-0.4216],[-0.7165,-0.3254]]},"viol":{"mm":0.2,"deg":0,"ms":0.001,"worst":"knee","drop":0.5,"tp":38}},"25s":{"which":"AB","TO":0.51,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":25,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":25,"d":{"th":[-2.2227,[1.9679,11.5795],[6.8987,-3.1183],[-4.7163,-2.9956],[0.0675,0.4144],[-0.221,-0.8962],[-0.2388,-0.7726],[-1.1699,0.0925]],"sh":[-5.6346,[-11.8895,-13.3638],[-6.5079,2.9251],[2.9495,1.774],[0.1872,-0.0334],[0.8089,0.2789],[0.6325,0.9632],[0.5409,0.0658]],"ft":[9.2968,[-14.4097,-19.7462],[-13.2782,11.1084],[4.3284,1.8127],[-4.397,-0.1133],[-0.3342,1.5807],[-0.7383,0.3441],[-0.4098,0.5919]]},"viol":{"mm":1.2,"deg":0.6,"ms":0.007,"worst":"knee"}},"25c":{"HOLDT":0.36,"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":25,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"KR":25,"d":{"th":[-2.2772,[-6.6029,18.6704],[11.5444,-3.3231],[3.657,-6.9313],[-3.2325,-1.7798],[-1.3697,-1.1529],[-1.1195,1.2317],[-0.5203,0.5905],[0.7217,0.2471],[0.0478,0.2203]],"sh":[-3.0426,[-8.7366,-13.4866],[-8.2619,10.2037],[1.4078,3.3847],[1.4552,-1.0333],[-0.7296,0.0252],[-0.4863,-1.072],[0.4839,0.1985],[-1.0254,0.6096],[0.3906,-0.2836]],"ft":[8.9878,[-13.9213,-22.1553],[-13.3424,14.5972],[3.934,0.6341],[-2.706,-1.041],[-1.4064,2.6996],[-0.788,-0.7562],[0.5051,0.3945],[-1.1189,-0.0828],[-0.1134,-0.4069]]},"viol":{"mm":0.4,"deg":0.2,"ms":0.002,"worst":"swingDorsi","drop":0.5,"tp":37}},"30s":{"which":"AB","TO":0.51,"KD":7,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":30,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":false,"KR":30,"d":{"th":[-3.3317,[1.9606,16.4387],[8.2728,-3.4786],[-4.6377,-4.1891],[-0.9797,-0.0282],[-0.1622,-0.9776],[0.0529,-0.3482],[-0.6897,-0.2373]],"sh":[-5.8684,[-12.7068,-14.3153],[-5.542,4.5765],[4.0919,1.873],[0.5591,0.0321],[0.4917,0.6274],[0.4661,1.1942],[0.2922,0.1818]],"ft":[9.7516,[-15.0747,-20.3977],[-13.171,12.0756],[4.7663,1.4348],[-4.4815,-0.5464],[-0.6245,1.842],[-0.4893,0.2472],[-0.5987,0.4612]]},"viol":{"mm":2.5,"deg":0.9,"ms":0.007,"worst":"knee"}},"30c":{"HOLDT":null,"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":30,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"KR":30,"d":{"th":[-0.6943,[-6.2118,21.3192],[12.7491,-4.6819],[3.1172,-5.7122],[-2.9146,-4.0591],[-1.2104,-0.8275],[-2.6058,1.3218],[0.1457,-0.1579],[-0.4293,1.5989],[0.1809,-0.4248]],"sh":[-5.185,[-9.6586,-14.0738],[-8.9806,11.2396],[1.9395,2.606],[2.162,1.2544],[0.0846,0.468],[1.9181,-0.8418],[0.0815,0.3687],[-0.3928,-0.1567],[-0.0893,0.1429]],"ft":[8.6868,[-13.854,-22.6707],[-13.8811,15.5869],[3.8771,0.153],[-1.899,0.5243],[-2.0097,1.7783],[0.3476,-0.5927],[-0.1216,0.2855],[-0.6947,-0.8411],[-0.4168,0.153]]},"viol":{"mm":0.4,"deg":0.2,"ms":0.002,"worst":"swingDorsi","drop":0.5,"tp":38}},"L0":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":1.05,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.33,"HIPMAX":0.818,"ANKROM":25,"KR":10,"d":{"th":[3.1639,[1.2916,8.9578],[4.105,-5.309],[0.0634,-2.0923],[0.2615,0.4208],[-0.7959,-0.2385],[0.7891,-0.0553],[-0.1679,0.5819],[-0.7636,0.058],[0.4603,0.1875]],"sh":[-5.5166,[-7.1001,-12.4713],[-7.4327,6.8778],[0.9559,1.7046],[-0.7634,-0.3634],[0.7298,0.474],[-0.1565,0.0873],[0.6608,-0.616],[-0.0469,0.2119],[-0.1307,-0.3843]],"ft":[8.7834,[-13.6195,-20.362],[-13.5129,11.8884],[3.6346,1.8895],[-3.6175,0.242],[0.1228,2.0952],[-0.6723,-0.4561],[-0.1671,-0.4083],[-0.4071,0.1577],[-0.5069,-0.43]]},"viol":{"mm":0.8,"deg":0.16,"ms":0.003,"worst":"swingDorsi","drop":0.52,"tp":26,"hipmm":0},"hipDrop":0,"ank":25},"L0_35":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":35,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":1.25,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.33,"HIPMAX":0.818,"ANKROM":35,"KR":10,"d":{"th":[6.1158,[6.3635,10.569],[4.0837,-5.2888],[0.7804,-1.6976],[-0.1803,0.5287],[-0.4916,-0.2184],[0.7863,0.0244],[-0.2422,0.5741],[-0.906,-0.1751],[0.3183,0.1244]],"sh":[-9.2759,[-3.9925,-13.0864],[-6.3355,6.9053],[1.2608,1.5823],[-0.8748,-0.7129],[0.3101,0.5381],[-0.0725,0.1337],[0.5483,-0.6515],[-0.4296,0.1466],[-0.2159,-0.6878]],"ft":[8.8098,[-13.0351,-20.9861],[-13.9592,12.2163],[3.6065,1.7295],[-3.3699,0.0904],[0.0959,2.0702],[-0.5495,-0.6062],[-0.192,-0.5513],[-0.8385,0.3006],[-0.5396,-0.4464]]},"viol":{"mm":0.4,"deg":0.07,"ms":0.003,"worst":"swingDorsi","drop":0.53,"tp":25,"hipmm":0},"hipDrop":0,"ank":35},"L2_35":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":35,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":1.35,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.33,"HIPMAX":0.798,"ANKROM":35,"KR":10,"d":{"th":[7.481,[9.3591,11.6835],[3.1503,-4.8629],[1.461,-1.7708],[0.1905,0.4579],[-0.3875,-0.0558],[0.4827,-0.0605],[0.2229,0.6843],[-0.9246,-0.3594],[0.1054,0.4725]],"sh":[-12.1011,[-4.0092,-13.1197],[-5.3053,6.3375],[1.291,1.5194],[-0.3524,-0.6627],[0.6994,0.2512],[0.0651,0.1566],[0.6184,-0.7791],[-0.0252,0.2307],[-0.0464,-0.654]],"ft":[9.3251,[-13.8707,-20.9219],[-13.6925,11.9165],[3.1558,2.1944],[-3.0459,0.2955],[0.1972,1.6208],[-0.6815,-0.4604],[-0.1664,-0.5288],[-0.6459,0.3387],[-0.5478,-0.3757]]},"viol":{"mm":0.9,"deg":0.1,"ms":0.005,"worst":"swingDorsi","drop":0.53,"tp":25,"hipmm":0},"hipDrop":2,"ank":35},"L4_35":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":35,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":1.25,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.33,"HIPMAX":0.778,"ANKROM":35,"KR":10,"d":{"th":[7.8287,[6.9348,11.6249],[3.6576,-4.8293],[1.2656,-1.8755],[-0.0302,0.4075],[0.1278,-0.1189],[0.2008,-0.2556],[0.1053,0.7869],[-0.8382,-0.5404],[0.1031,0.6229]],"sh":[-12.7562,[-5.3993,-13.1916],[-5.3458,6.1857],[1.1916,1.3992],[-0.0542,-0.5175],[0.7515,0.0965],[0.4502,-0.0455],[0.4163,-0.8742],[0.0607,0.0501],[-0.0478,-0.6019]],"ft":[9.5274,[-14.6187,-20.8944],[-13.2261,11.9907],[2.8866,2.0799],[-3.0074,0.7401],[0.0783,1.7558],[-0.4494,-0.4153],[-0.2976,-0.4776],[-0.4114,0.1884],[-0.4592,-0.2945]]},"viol":{"mm":0.9,"deg":0.07,"ms":0.003,"worst":"nokick","drop":0.53,"tp":25,"hipmm":0},"hipDrop":4,"ank":35},"S1":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.31,"KR":10,"SPRING":1,"NKFN":null,"d":{"th":[1.9739,[-2.6084,8.9726],[4.1432,-4.2553],[-1.0693,-2.3824],[0.668,-0.1544],[-1.4007,-0.3144],[0.3748,-0.1421],[0.0191,0.3114],[-0.1367,0.1614],[-0.009,-0.0275]],"sh":[-4.5355,[-9.359,-12.186],[-7.2097,5.447],[1.066,1.8765],[-1.0103,0.0584],[0.8354,0.406],[0.4647,0.1327],[0.6077,-0.2772],[0.0604,-0.0319],[0.0475,-0.0468]],"ft":[9.0487,[-13.9004,-20.0941],[-13.6881,11.4995],[3.6593,2.118],[-3.7999,0.2005],[-0.0122,2.0121],[-0.5416,-0.348],[-0.4446,-0.075],[-0.143,0.0007],[-0.1582,-0.017]]},"viol":{"mm":0.1,"deg":0.05,"ms":0.001,"worst":"knee"},"hipDrop":0,"ank":25,"expShort":"ばね・重み1","expLabel":"ばねを探し方に足す（重み 1）"},"S4":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.31,"KR":10,"SPRING":4,"NKFN":null,"d":{"th":[2.009,[-2.5866,8.9393],[4.1839,-4.3191],[-1.0239,-2.3807],[0.7163,-0.1642],[-1.3147,-0.322],[0.3666,-0.1554],[-0.0238,0.3087],[-0.2445,0.2201],[-0.0797,-0.032]],"sh":[-4.5183,[-9.2403,-12.2367],[-7.2204,5.3699],[1.0553,1.8598],[-0.9228,0.014],[0.7857,0.3913],[0.4546,0.0845],[0.5654,-0.2901],[0.0212,-0.0798],[0.0085,-0.0633]],"ft":[9.0721,[-13.8903,-20.2012],[-13.6693,11.4174],[3.6692,2.073],[-3.7359,0.1176],[0.019,1.9992],[-0.4691,-0.3445],[-0.5149,-0.0374],[-0.2422,-0.0521],[-0.2153,-0.0722]]},"viol":{"mm":0.2,"deg":0.06,"ms":0.002,"worst":"knee"},"hipDrop":0,"ank":25,"expShort":"ばね・重み4","expLabel":"ばねを探し方に足す（重み 4）"},"NKF":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.39,"KR":10,"SPRING":0,"NOKF":true,"FMAX":0.01,"NKFN":null,"d":{"th":[2.9672,[-3.9146,8.5967],[4.8468,-4.3599],[-1.2553,-2.1551],[0.1376,-0.4348],[-1.1047,-0.3495],[-0.1799,0.1952],[-0.3039,0.2611],[0.0254,0.1644],[-0.1593,-0.033]],"sh":[-2.4428,[-7.6841,-11.5322],[-7.8984,5.2448],[1.0987,1.4505],[-0.5293,0.3598],[0.6234,0.47],[0.7924,-0.0843],[0.7168,-0.257],[0.2388,-0.1294],[0.1398,-0.0996]],"ft":[8.9259,[-14.4107,-20.3393],[-13.4497,11.8358],[3.4989,2.0527],[-3.4611,0.0954],[-0.179,1.923],[-0.5086,-0.4102],[-0.398,0.1077],[-0.548,0.0784],[-0.2246,0.0851]]},"viol":{"mm":0.1,"deg":0.05,"ms":0.001,"worst":"knee","nokickF":0.012},"hipDrop":0,"ank":25,"expShort":"筋が押さない","expLabel":"蹴らない＝足首の筋が押さない（両脚支持 1%）"},"DS6":{"which":"AB","TO":0.56,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.39,"KR":10,"SPRING":0,"NOKF":true,"FMAX":0.01,"NKFN":null,"d":{"th":[3.0869,[-3.9753,8.9043],[4.9248,-4.4237],[-1.3072,-2.0696],[0.2525,-0.3711],[-1.1137,-0.3933],[-0.1334,0.2851],[-0.2253,0.1558],[-0.1475,0.1439],[-0.167,0.047]],"sh":[-2.0786,[-7.6674,-11.4827],[-7.8668,5.1612],[1.145,1.3817],[-0.6254,0.318],[0.646,0.5496],[0.7217,-0.0982],[0.7008,-0.1585],[0.1751,-0.1587],[0.1218,-0.0698]],"ft":[9.028,[-14.3496,-20.4678],[-13.4734,11.7208],[3.4644,2.0998],[-3.4307,0.1138],[-0.2108,1.9819],[-0.4639,-0.4496],[-0.4344,0.1278],[-0.4812,0.0722],[-0.206,0.0868]]},"viol":{"mm":0,"deg":0.02,"ms":0,"worst":"knee","nokickF":0.011},"hipDrop":0,"ank":25,"expShort":"筋が押さない・両脚支持6%","expLabel":"同じ・両脚支持を周期の 6%"},"RET":{"which":"AB","TO":0.51,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.39,"KR":10,"SPRING":0,"NOKF":true,"FMAX":0.01,"NKFN":0.03,"d":{"th":[2.9514,[-4.2973,8.7025],[4.8803,-5.0951],[-1.1492,-2.1424],[-0.4214,-0.5658],[-0.9603,-0.3438],[-0.2259,0.1776],[-0.3129,0.268],[0.0455,0.0666],[-0.1634,-0.0317]],"sh":[-2.2917,[-7.493,-11.4806],[-7.6982,6.2809],[0.9678,1.3322],[0.3498,0.3766],[0.4976,0.4823],[0.8927,-0.3552],[0.678,-0.2755],[0.1428,-0.2575],[0.1281,-0.1134]],"ft":[8.8314,[-14.2155,-20.2391],[-13.4629,11.7484],[3.6183,2.0099],[-3.5062,-0.0589],[-0.1455,1.9547],[-0.6718,-0.4801],[-0.3483,0.0763],[-0.6637,0.0568],[-0.2198,0.1676]]},"viol":{"mm":1.1,"deg":0.05,"ms":0.004,"worst":"swingFlat","nokickF":0.016,"returnF":0.039},"hipDrop":0,"ank":25,"expShort":"ばねを捨てない","expLabel":"足首の筋が押さず、腱の蓄えも捨てない（両脚支持 1%）"},"RET6":{"which":"AB","TO":0.56,"KD":9,"C":{"ft0":0.5,"hovFt":3,"hovLo":0.005,"hovHi":0.03,"kneeRel":10,"flatFt":0.5,"ankROM":25,"clr":0.01,"ankSw2":0,"swFt":10,"swHi":0.06,"flatEnd":0.3,"swDrop":2},"SWV":0.1,"LT":0.851,"NEW":true,"NOBACK":true,"AZMAX":1,"HOLDCOM":true,"HOLDT":0.39,"KR":10,"SPRING":0,"NOKF":true,"FMAX":0.01,"NKFN":0.03,"d":{"th":[3.3482,[-4.159,9.7521],[4.8373,-4.5628],[-1.2946,-2.0322],[0.1504,-0.4443],[-1.1179,-0.3735],[-0.2434,0.3055],[-0.235,0.2432],[-0.2568,-0.0024],[-0.2043,0.0308]],"sh":[-1.5192,[-7.5648,-11.3048],[-7.2818,5.5421],[1.084,1.1358],[-0.3828,0.4083],[0.5905,0.4702],[0.6998,-0.052],[0.7802,-0.2112],[0.173,-0.1962],[0.1092,-0.0607]],"ft":[9.1245,[-14.0261,-20.4633],[-13.6126,11.4801],[3.6547,2.1791],[-3.5214,-0.3076],[-0.189,2.1358],[-0.4694,-0.649],[-0.4193,0.145],[-0.5293,-0.2169],[-0.4004,0.1717]]},"viol":{"mm":1.3,"deg":0.06,"ms":0.007,"worst":"flat","nokickF":0.014,"returnF":0.048},"hipDrop":0,"ank":25,"expShort":"ばねを捨てない・両脚支持6%","expLabel":"同じ・両脚支持を周期の 6%"}},"slowMeas":{"v":0.876,"L":1.102,"T":1.27},"prev":{"A":{"TO":0.6221,"d":{"th":[-5.0455,[-3.9811,0.7092],[3.3149,3.2899],[0.3204,0.004],[-0.1658,0.8135],[0.2641,-0.0291],[0.0458,0.1263],[0.0086,0.0075]],"sh":[-1.09,[-12.7998,-7.9206],[-8.3977,1.5073],[0.6947,1.194],[0.6951,-2.3236],[-1.1879,-0.1823],[0.0282,0.1423],[0.0421,-0.0041]],"ft":[7.7996,[-12.0342,-19.5996],[-14.6711,11.2014],[4.0096,2.614],[-2.5615,-0.5322],[-2.0401,1.4368],[-0.141,0.4049],[-0.3394,0.336]]}},"B":{"TO":0.51,"d":{"th":[0.1943,[2.1242,-3.022],[-0.3253,0.768],[-0.3497,-0.8187],[-0.4511,0.8711],[0.0202,-0.1695],[0.0402,0.0412],[0.0805,0.2852]],"sh":[-1.802,[1.2554,3.1251],[-0.2164,-1.8601],[-2.4048,-0.1177],[0.2607,0.5288],[-0.3098,-0.5284],[-0.0096,0.0391],[0.0263,-0.0133]],"ft":[2.4951,[-2.668,-3.4084],[-0.6816,3.8553],[2.0661,-1.5359],[-1.1762,-1.2203],[-0.4079,0.7718],[0.1039,-0.0057],[-0.0245,-0.0319]]}},"AB":{"TO":0.51,"d":{"th":[-1.2889,[1.7172,4.1431],[5.7415,-0.575],[-2.2295,-1.656],[0.3415,-0.3842],[-1.7887,-0.1722],[-0.0138,-0.1508],[-0.2156,-0.0055]],"sh":[-3.931,[-10.8612,-11.5586],[-8.4998,3.5197],[1.5123,1.8903],[-0.5472,-0.3481],[-0.0077,0.1497],[-0.0744,-0.0288],[0.1034,-0.0336]],"ft":[9.0239,[-14.3018,-20.0558],[-14.1906,11.6215],[3.6493,2.2856],[-4.151,0.5765],[-0.0886,2.6518],[-0.0318,-0.0324],[-0.1112,0.1705]]}}},"HIPSCAN":[{"key":"L0","d":0,"ank":25,"maxL":1.05,"failL":1.1,"failWorst":"swingDorsi","failDeg":0.37,"failMm":3.5,"failHip":0,"tried":[[0.9,true],[0.95,true],[1,true],[1.05,true],[1.1,false],[1.15,false]]},{"key":"L0_35","d":0,"ank":35,"maxL":1.25,"failL":1.3,"failWorst":"swingDorsi","failDeg":0.19,"failMm":2,"failHip":0,"tried":[[1.1,true],[1.15,true],[1.2,false],[1.25,true],[1.3,false],[1.35,false]]},{"key":"L2_35","d":2,"ank":35,"maxL":1.35,"failL":1.4,"failWorst":"knee","failDeg":0.24,"failMm":1.9,"failHip":0,"tried":[[0.9,true],[0.95,true],[1,true],[1.05,true],[1.1,true],[1.15,true],[1.2,true],[1.25,false],[1.3,true],[1.35,true],[1.4,false]]},{"key":"L4_35","d":4,"ank":35,"maxL":1.25,"failL":1.3,"failWorst":"nokick","failDeg":0.1,"failMm":1.4,"failHip":0,"tried":[[0.9,true],[0.95,true],[1,true],[1.05,true],[1.1,true],[1.15,true],[1.2,true],[1.25,true],[1.3,false],[1.35,false]]}],"H0":81.8,"HIPLIM":{"ank25":{"maxDrop":1,"failDrop":1.5,"worst":"ankROM","tried":[[0.5,true],[1,true],[1.5,false],[2,false],[2.5,false]]},"ank35":{"maxDrop":6,"failDrop":null,"worst":null,"tried":[[0.5,true],[1,true],[1.5,true],[2,true],[2.5,true],[3,true],[3.5,true],[4,true],[4.5,true],[5,true],[5.5,true],[6,true]]}},"EXP":{"kB":{"ank":9.12,"knee":4.37,"hip":5.5},"kM":{"ank":5.01,"knee":3.31,"hip":3.16},"date":"2026-10-30"}}/*END*/;
+(function () {
+  const K = KISO, KS = KISO_SLOW, D = K.D, RAD = Math.PI / 180;
+  const MEAS = { L: 1.275, Lsd: 0.116, v: 1.205, vsd: 0.153, T: 1.066 };
+  const NAMES = { base: 'ふつう', slow: 'ゆっくり', A: '足裏水平', B: '蹴らない', AB: '両方' };
+  const ORDER = ['base', 'slow', 'A', 'B', 'AB'];
+  const MOD = k => k === 'slow' ? KS : K;                 // 計算に使う模型（データ）
+  const REF = k => k === 'base' ? 'slow' : k === 'slow' ? 'base' : k === 'B' ? 'base' : (k === 'AB' && SIM.AB && SIM.AB.v > 1.0) ? 'base' : 'slow'; // 比べる土台（両方は速さで決める）
+  const NOTE = {
+    base: '健常な若年成人のふつうの歩き（1.16 m/s）。踵で着き、両脚で支える間に後ろ足の足首で押し出します。',
+    slow: '同じ人たちが、ふつうより約30%遅く歩いた時の平均（模型で 0.83 m/s）。足裏水平と両方を比べる相手です。',
+    A: '足裏を水平にして着き、荷重中は足裏を平らに保ちます。接地のあと膝が曲がります（膝抜き）。遊脚の終わりは足を水平のまま床すれすれに保ちます。',
+    B: '後ろ足は離れるまで足首を底屈に戻さず、底屈で押しません。前の足が着いた瞬間に後ろ足が離れます（両脚支持は周期の1%）。',
+    AB: '足裏水平と蹴らないを両方入れた歩き。田代さんの理論の歩きに、いちばん近いものです。膝の抜きの深さと、伸ばし始める時（重心が前足を越えてから／すぐ）を上で選べます。'
+  };
+  const Vof = k => (k === 'base' || k === 'slow') ? {} : { d: VARS[k].d, TO: VARS[k].TO };
+  const SIM = {}, IDX = {};
+  try {
+    for (const k of ORDER) { SIM[k] = MOD(k).simulate(Vof(k), { N: 600 }); IDX[k] = MOD(k).indices(SIM[k]); }
+  } catch (e) { document.querySelector('.lede').textContent = '計算でエラーが出ました：' + e.message; return; }
+  const N = SIM.base.N, P0 = SIM.base.P;
+  // 前の版（10-29 朝）の関節の動きを、いまの模型で計算し直す
+  const VAR3 = ['A', 'B', 'AB'], SIM3 = {}, IDX3 = {};
+  for (const k of VAR3) { SIM3[k] = K.simulate({ d: VARS.prev[k].d, TO: VARS.prev[k].TO }, { N: 600 }); IDX3[k] = K.indices(SIM3[k]); }
+  // 両方の膝の抜き（深さ×伸ばし始め）。計算は選んだ時に一度だけ
+  const KEYS = ['10c', '15c', '20c', '25c', '30c', '10s', '15s', '20s', '25s', '30s'];
+  let abKey = '10c';
+  const ABC = { '10c': { sim: SIM.AB, idx: IDX.AB } };
+  const ensureAB = key => { if (!ABC[key]) { const v = VARS.ABV[key], s = K.simulate({ d: v.d, TO: v.TO }, { N: 600 }); ABC[key] = { sim: s, idx: K.indices(s) }; } return ABC[key]; };
+  const isKnee = key => /^\d+[cs]$/.test(key);
+  const hipTxt = v => v.hipDrop ? `腰 −${v.hipDrop} cm` : '腰そのまま';
+  const abLabel = key => { if (VARS.ABV[key] && VARS.ABV[key].expLabel) return VARS.ABV[key].expLabel; if (isKnee(key)) return `${parseInt(key)}°・${key.endsWith('c') ? '重心が越えるまで曲げる' : 'すぐ伸ばす'}`; const v = VARS.ABV[key]; return `重複歩 ${v.LT.toFixed(2)} m・${hipTxt(v)}・足首の上限 ${v.ank}°（膝 10°・重心が越えるまで曲げる）`; };
+  const nameOf = k => { if (k !== 'AB') return NAMES[k]; if (VARS.ABV[abKey].expShort) return `両方（${VARS.ABV[abKey].expShort}）`; if (isKnee(abKey)) return abKey === '10c' ? '両方（基本練習形）' : `両方（膝 ${parseInt(abKey)}°${abKey.endsWith('s') ? '・すぐ伸ばす' : ''}）`; const v = VARS.ABV[abKey]; return `両方（${v.LT.toFixed(2)} m${v.hipDrop ? '・腰−' + v.hipDrop : ''}${v.ank !== 25 ? '・足首' + v.ank + '°' : ''}）`; };
+  const hipMean = r => r.R.reduce((s, q) => s + q.pc[1], 0) / r.N * 100;
+  // 膝の抜きと追い抜き：膝の最大、追い抜き（遊脚の足首が立脚の足首を前へ越える）、その後の膝の正の仕事と前への速さの増え
+  // 膝の抜きと、重心が前足（右）の接地点を越える時：膝の最大、越えるまでのブレーキと荷重、前への速さの変化、越えた後の膝の正の仕事
+  const kneeStats = (r, angFn) => { let km = -1e9, kp = 0; for (let p = 0; p <= 0.4; p += 0.005) { const a = angFn(p), kn = a.th - a.sh; if (kn > km) { km = kn; kp = p; } } const a0 = angFn(0), k0 = a0.th - a0.sh;
+    let jp = null; for (let j = 1; j < r.N * r.P.TO; j++) { const s = r.R[j]; if (s.info[0] && r.com[j][0] >= s.info[0].cx) { jp = j; break; } }
+    const j0 = jp || Math.round(0.2 * r.N), j1 = Math.round(r.P.TO * r.N);
+    let kw = 0, dvA = 0, dvB = 0, brk = 0, fzMin = 1e9;
+    for (let j = 0; j < j1; j++) { if (j < j0) { dvB += r.Fx[j] * r.dt; brk = Math.min(brk, r.Fx[j]); fzMin = Math.min(fzMin, r.Fz[j]); } else { dvA += r.Fx[j] * r.dt; const pk = r.J[0].Pk[j]; if (pk > 0) kw += pk * r.dt; } }
+    let kx = null; for (let p = kp; p <= r.P.TO; p += 0.005) { const a = angFn(p); if (a.th - a.sh < km - 2) { kx = p; break; } }
+    return { k0, km, kp, kx, tp: jp ? jp / r.N : null, kw, dvA, dvB, brk: brk / r.P.g, fzMin: fzMin / r.P.g }; };
+  // 離れた後の後ろ足（右の膝・足首・踵・MTP）が床に対して後ろへ戻る速さの最大（m/s、戻らなければ0）
+  const backMax = r => { let m = 0; for (let j = 0; j < r.N; j++) { if (r.R[j].ph[0] < r.P.TO) continue; for (const nm of ['knee', 'ank', 'heel', 'mtp']) { const a = r.R[(j - 1 + r.N) % r.N].legs[0][nm][0] - (j === 0 ? r.L : 0), c = r.R[(j + 1) % r.N].legs[0][nm][0] + (j === r.N - 1 ? r.L : 0); m = Math.min(m, (c - a) / 2 / r.dt); } } return -m; };
+  // 骨盤の前への速さ（ならさない）の最小・最大
+  const vRange = r => { let lo = 1e9, hi = -1e9; for (let j = 0; j < r.N; j++) { const a = r.R[(j - 1 + r.N) % r.N].pc[0] - (j === 0 ? r.L : 0), c = r.R[(j + 1) % r.N].pc[0] + (j === r.N - 1 ? r.L : 0), u = (c - a) / 2 / r.dt; lo = Math.min(lo, u); hi = Math.max(hi, u); } return [lo, hi]; };
+  // 関節の動きの変更の大きさ（探し方で小さくした量。5°で1、高い次数ほど重い）
+  const chgOf = d => { let s = 0; for (const nm of ['th', 'sh', 'ft']) { const c = d[nm]; s += (c[0] / 5) ** 2; for (let n = 1; n < c.length; n++) { const w = Math.sqrt(0.5) * (1 + (n / 1.5) ** 2); s += w * w * ((c[n][0] / 5) ** 2 + (c[n][1] / 5) ** 2); } } return s; };
+  const f2 = (x, d = 2) => x.toFixed(d);
+  let cur = 'base', ghost = true, showAnk = true;
+
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let C = {};
+  const readColors = () => { C = { bg: css('--panel'), ink: css('--ink'), mute: css('--mute'), rule: css('--rule'), acc: css('--accent'), r: css('--leg-r'), l: css('--leg-l'), brake: css('--brake'), push: css('--push'), meas: css('--meas'), band: css('--band') }; };
+  readColors();
+
+  // ---- ロッカーと MTP 角（歩きごと）----
+  const modeName = { heel: 'ヒールロッカー', arc: 'アンクルロッカー', mtp: 'フォアフットロッカー' };
+  const EXTRA = {};
+  const mkExtra = k => {
+    const r = SIM[k], P = r.P;
+    const segs = r.roll.segs.map((s, i, a) => ({ from: s.from, to: i + 1 < a.length ? a[i + 1].from : P.TO, mode: s.mode }));
+    const modeAt = ph => { if (ph >= P.TO) return null; let m = segs[0].mode; for (const s of segs) if (ph >= s.from) m = s.mode; return m; };
+    const ftTO = -MOD(k).angles(P.TO - 1e-6, Vof(k)).ft;
+    const mtpOf = (ph, ft) => { const m = modeAt(ph); if (m === 'mtp' || m === 'arc') return Math.max(0, -ft); // 足裏の弧で踵が浮き始めた時から足指を床に残す（10-29：切り替えの 4° の跳びを除いた）
+      if (m === 'heel') return 0; if (ph >= P.TO) { const q = Math.min(1, (ph - P.TO) / 0.1); return Math.max(0, ftTO) * (1 - q * q * (3 - 2 * q)); } return 0; };
+    EXTRA[k] = { segs, modeAt, mtpOf, MTP: r.R.map(s => mtpOf(s.ph[0], s.A[0].ft)) };
+  };
+  for (const k of ORDER) mkExtra(k);
+
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
+  const fit = (c, ratio) => { const w = Math.max(280, c.clientWidth || c.parentElement.clientWidth); const W = Math.round(w * DPR), H = Math.round(w * ratio(w) * DPR); if (c.width !== W || c.height !== H) { c.width = W; c.height = H; } return DPR; };
+
+  // ---- 歩く絵 ----
+  const cv = document.getElementById('walk'), g = cv.getContext('2d');
+  let phase = 0, playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches, speed = 0.5, last = null;
+  function drawWalk() {
+    const k = fit(cv, w => w < 620 ? 0.95 : 0.5625), fpx = n => Math.round(n * k) + 'px ';
+    const W = cv.width, H = cv.height, r = SIM[cur], P = r.P, E = EXTRA[cur], rf = SIM[REF(cur)];
+    g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
+    const j = Math.floor(((phase % 1) + 1) % 1 * N), s = r.R[j], jr = Math.floor(((phase % 1) + 1) % 1 * rf.N);
+    const groundY = H - 26 * k, sc = Math.min((groundY - 30 * k) / 1.72, W / 2.6);
+    const camX = s.pc[0];
+    const X = x => W * 0.5 + (x - camX) * sc, Y = z => groundY - z * sc;
+    g.strokeStyle = C.rule; g.lineWidth = 2; g.beginPath(); g.moveTo(0, groundY); g.lineTo(W, groundY); g.stroke();
+    const x0 = Math.floor((camX - W / 2 / sc) * 10) / 10;
+    for (let x = x0; x < camX + W / 2 / sc; x += 0.1) { const px = X(x); const big = Math.abs(Math.round(x * 10) % 5) === 0; g.beginPath(); g.moveTo(px, groundY); g.lineTo(px, groundY + (big ? 8 : 4) * k); g.stroke(); }
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    // 土台を薄く（骨盤の位置をそろえる）
+    if (ghost) {
+      const sb = rf.R[jr], dx = s.pc[0] - sb.pc[0];
+      g.strokeStyle = C.rule; g.lineWidth = 7 * k;
+      for (let leg = 1; leg >= 0; leg--) {
+        const L = sb.legs[leg];
+        g.beginPath(); g.moveTo(X(L.hip[0] + dx), Y(L.hip[1])); g.lineTo(X(L.knee[0] + dx), Y(L.knee[1])); g.lineTo(X(L.ank[0] + dx), Y(L.ank[1])); g.stroke();
+        g.lineWidth = 5 * k; g.beginPath(); g.moveTo(X(L.ank[0] + dx), Y(L.ank[1])); g.lineTo(X(L.heel[0] + dx), Y(L.heel[1])); g.lineTo(X(L.mtp[0] + dx), Y(L.mtp[1])); g.closePath(); g.stroke(); g.lineWidth = 7 * k;
+      }
+    }
+    // 重心の通り道
+    g.setLineDash([3 * k, 4 * k]); g.strokeStyle = C.acc; g.lineWidth = 1.5 * k; g.beginPath();
+    for (let q = -N; q <= N; q += 4) { const jj = ((j + q) % N + N) % N, wrap = Math.floor((j + q) / N); const c = r.com[jj]; const px = X(c[0] + wrap * r.L), py = Y(c[1]); q === -N ? g.moveTo(px, py) : g.lineTo(px, py); }
+    g.stroke(); g.setLineDash([]);
+    // 上体と頭
+    const hat = [s.pc[0], s.pc[1] + 0.56];
+    g.strokeStyle = C.r; g.lineWidth = 5 * k;
+    g.beginPath(); g.moveTo(X(s.pc[0]), Y(s.pc[1])); g.lineTo(X(hat[0]), Y(hat[1])); g.stroke();
+    g.beginPath(); g.arc(X(hat[0]), Y(hat[1] + 0.13), 0.1 * sc, 0, Math.PI * 2); g.lineWidth = 3.5 * k; g.stroke();
+    const drawLeg = (leg, col) => {
+      const L = s.legs[leg], a = s.A[leg], ph = s.ph[leg];
+      g.strokeStyle = col; g.lineWidth = 6 * k;
+      g.beginPath(); g.moveTo(X(L.hip[0]), Y(L.hip[1])); g.lineTo(X(L.knee[0]), Y(L.knee[1])); g.lineTo(X(L.ank[0]), Y(L.ank[1])); g.stroke();
+      const toeAng = a.ft + E.mtpOf(ph, a.ft);
+      const toe = [L.mtp[0] + P.toe * Math.cos(toeAng * RAD), L.mtp[1] + P.toe * Math.sin(toeAng * RAD)];
+      g.lineWidth = 4 * k; g.beginPath(); g.moveTo(X(L.ank[0]), Y(L.ank[1])); g.lineTo(X(L.heel[0]), Y(L.heel[1])); g.lineTo(X(L.mtp[0]), Y(L.mtp[1])); g.lineTo(X(toe[0]), Y(toe[1])); g.closePath(); g.stroke();
+      g.fillStyle = C.bg; g.lineWidth = 2 * k;
+      for (const p of [L.hip, L.knee, L.ank, L.mtp]) { g.beginPath(); g.arc(X(p[0]), Y(p[1]), 3.5 * k, 0, Math.PI * 2); g.fill(); g.stroke(); }
+      // 足首の角度（背屈が正）
+      if (showAnk) {
+        const an = a.ft - a.sh;
+        g.fillStyle = col; g.font = '600 ' + fpx(12) + css('--f-mono'); g.textAlign = 'left';
+        const lx = X(L.ank[0]) + (leg === 0 ? -12 : 12) * k, ly = Y(L.ank[1]) - 10 * k;
+        g.textAlign = leg === 0 ? 'right' : 'left';
+        g.fillText(`${an >= 0 ? '背屈' : '底屈'}${Math.abs(an).toFixed(0)}°`, lx, ly); g.textAlign = 'left';
+      }
+    };
+    drawLeg(1, C.l); drawLeg(0, C.r);
+    for (let leg = 0; leg < 2; leg++) {
+      const inf = s.info[leg]; if (!inf) continue;
+      const f = r.Fleg[j][leg]; const fs = 0.032;
+      const x0p = inf.cx + r.dCop, ax = X(x0p), ay = Y(0), bx = X(x0p + f[0] * fs), by = Y(f[1] * fs);
+      g.strokeStyle = f[0] < 0 ? C.brake : C.push; g.fillStyle = g.strokeStyle; g.lineWidth = 3 * k;
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+      const an = Math.atan2(by - ay, bx - ax); g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - 10 * k * Math.cos(an - 0.4), by - 10 * k * Math.sin(an - 0.4)); g.lineTo(bx - 10 * k * Math.cos(an + 0.4), by - 10 * k * Math.sin(an + 0.4)); g.closePath(); g.fill();
+      g.beginPath(); g.arc(ax, ay, 4 * k, 0, Math.PI * 2); g.fill();
+    }
+    const c = r.com[j]; g.fillStyle = C.acc; g.beginPath(); g.arc(X(c[0]), Y(c[1]), 6.5 * k, 0, Math.PI * 2); g.fill();
+    g.fillStyle = C.bg; g.beginPath(); g.arc(X(c[0]), Y(c[1]), 2.5 * k, 0, Math.PI * 2); g.fill();
+    g.fillStyle = C.ink; g.font = '600 ' + fpx(17) + css('--f-body');
+    const m0 = E.modeAt(s.ph[0]);
+    g.fillText(nameOf(cur) + '　右脚：' + (m0 ? modeName[m0] : '遊脚'), 14 * k, 28 * k);
+    g.fillStyle = C.mute; g.font = fpx(13.5) + css('--f-body');
+    g.fillText(s.info[0] && s.info[1] ? '両脚で支える' : '片脚で支える', 14 * k, 48 * k);
+    g.font = fpx(12) + css('--f-mono');
+    g.fillText(`周期 ${(s.ph[0] * 100).toFixed(0)}%  速さ ${r.vx[j].toFixed(2)} m/s  上下の反力 ${(r.Fz[j] / P.g).toFixed(2)} 体重`, 14 * k, H - 8 * k);
+    g.textAlign = 'right'; g.fillText('目盛り 10 cm', W - 14 * k, 24 * k); g.textAlign = 'left';
+  }
+
+  // ---- 周期の帯 ----
+  const cyc = document.getElementById('cycle'), cg = cyc.getContext('2d');
+  function drawCycle() {
+    const r = SIM[cur], P = r.P, segs = EXTRA[cur].segs;
+    const kk = DPR, cw = Math.max(280, cyc.clientWidth || 600), Wd = Math.round(cw * kk), Hd = Math.round(150 * kk); if (cyc.width !== Wd || cyc.height !== Hd) { cyc.width = Wd; cyc.height = Hd; }
+    cg.setTransform(kk, 0, 0, kk, 0, 0);
+    const W = cyc.width / kk, H = 150, x0 = 18, x1 = W - 18, X = p => x0 + (x1 - x0) * p;
+    cg.fillStyle = C.bg; cg.fillRect(0, 0, W, H);
+    cg.font = (W < 500 ? '11px ' : '12.5px ') + css('--f-body'); cg.textBaseline = 'middle';
+    const row = (y, h, from, to, col, label, fg) => { cg.fillStyle = col; cg.fillRect(X(from), y, Math.max(1.5, X(to) - X(from)), h); cg.fillStyle = fg || C.bg; cg.textAlign = 'center'; if (label && X(to) - X(from) > label.length * 9.5) cg.fillText(label, (X(from) + X(to)) / 2, y + h / 2); };
+    row(14, 30, 0, P.TO, C.acc, `立脚期 ${(P.TO * 100).toFixed(1)}%`); row(14, 30, P.TO, 1, C.rule, '遊脚期', C.ink);
+    const shortName = { heel: 'ヒール', arc: 'アンクル', mtp: 'フォアフット' };
+    for (const s of segs) { const wide = X(s.to) - X(s.from) > modeName[s.mode].length * 13 + 8; row(52, 30, s.from, s.to, s.mode === 'arc' ? C.band : C.rule, wide ? modeName[s.mode] : shortName[s.mode], C.ink); }
+    row(90, 18, 0, P.TO - 0.5, C.meas, '', C.ink); row(90, 18, 0.5, P.TO, C.meas, '', C.ink);
+    cg.fillStyle = C.mute; cg.textAlign = 'left'; cg.fillText('両脚支持', X(P.TO - 0.5) + 6, 99); cg.fillText('両脚支持', X(P.TO) + 6, 99);
+    cg.strokeStyle = C.rule; cg.fillStyle = C.mute; cg.font = '11px ' + css('--f-mono'); cg.textAlign = 'center';
+    for (let p = 0; p <= 1.0001; p += (W < 500 ? 0.2 : 0.1)) { cg.beginPath(); cg.moveTo(X(p), 112); cg.lineTo(X(p), 118); cg.stroke(); cg.fillText(Math.round(p * 100) + '%', X(p), 132); }
+    const p = ((phase % 1) + 1) % 1; cg.strokeStyle = C.ink; cg.lineWidth = 2; cg.beginPath(); cg.moveTo(X(p), 8); cg.lineTo(X(p), 116); cg.stroke(); cg.lineWidth = 1; cg.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  // ---- 曲線 ----
+  function chart(host, title, unit, seriesFn, opts) {
+    const box = document.createElement('div'); box.className = 'card';
+    box.innerHTML = `<h3>${title} <span class="readout">（${unit}）</span></h3>`;
+    const c = document.createElement('canvas'); c.className = 'chart'; c.width = 600; c.height = 260; box.appendChild(c); host.appendChild(box);
+    return () => {
+      const series = seriesFn(), TO = SIM[cur].P.TO;
+      const kk = fit(c, () => 0.48), cx = c.getContext('2d'); cx.setTransform(kk, 0, 0, kk, 0, 0);
+      const W = c.width / kk, H = c.height / kk, l = 40, rr = 18, t = 10, b = 24;
+      cx.fillStyle = C.bg; cx.fillRect(0, 0, W, H);
+      let lo = Infinity, hi = -Infinity;
+      for (const s of series) for (let i = 0; i < s.y.length; i++) { const v = s.y[i], bd = s.band ? s.band[i] : 0; lo = Math.min(lo, v - bd); hi = Math.max(hi, v + bd); }
+      if (opts && opts.lo != null) lo = Math.min(lo, opts.lo); if (opts && opts.hi != null) hi = Math.max(hi, opts.hi);
+      const step = (opts && opts.step) || 10; lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+      let nt = (hi - lo) / step, st = step; while (nt > 8) { st *= 2; nt = (hi - lo) / st; }
+      const X = p => l + (W - l - rr) * p, Y = v => t + (H - t - b) * (1 - (v - lo) / (hi - lo));
+      cx.fillStyle = C.band; cx.globalAlpha = 0.45; cx.fillRect(X(0), t, X(TO) - X(0), H - t - b); cx.globalAlpha = 1;
+      cx.strokeStyle = C.rule; cx.fillStyle = C.mute; cx.font = '11px ' + css('--f-mono'); cx.lineWidth = 1;
+      cx.textAlign = 'right'; cx.textBaseline = 'middle';
+      for (let v = lo; v <= hi + 1e-9; v += st) { cx.beginPath(); cx.moveTo(l, Y(v)); cx.lineTo(W - rr, Y(v)); cx.stroke(); cx.fillText(+v.toFixed(2), l - 6, Y(v)); }
+      cx.textAlign = 'center'; cx.textBaseline = 'top';
+      for (let p = 0; p <= 1.0001; p += 0.2) cx.fillText(Math.round(p * 100) + '%', X(p), H - b + 6);
+      for (const s of series) {
+        if (s.band) { cx.fillStyle = C.band; cx.beginPath(); s.y.forEach((v, i) => { const p = i / s.y.length; i ? cx.lineTo(X(p), Y(v + s.band[i])) : cx.moveTo(X(p), Y(v + s.band[i])); }); for (let i = s.y.length - 1; i >= 0; i--) cx.lineTo(X(i / s.y.length), Y(s.y[i] - s.band[i])); cx.closePath(); cx.fill(); continue; }
+        cx.strokeStyle = C[s.col]; cx.lineWidth = s.w || 2; cx.setLineDash(s.dash || []);
+        cx.beginPath(); s.y.forEach((v, i) => { const p = i / s.y.length; i ? cx.lineTo(X(p), Y(v)) : cx.moveTo(X(p), Y(v)); }); cx.stroke(); cx.setLineDash([]);
+      }
+      const p = ((phase % 1) + 1) % 1; cx.strokeStyle = C.ink; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(X(p), t); cx.lineTo(X(p), H - b); cx.stroke(); cx.setTransform(1, 0, 0, 1, 0, 0);
+    };
+  }
+  const four = (c, n) => Array.from({ length: n }, (_, i) => K.four(c, i / n));
+  const dOf = (k, nm) => (k === 'base' || k === 'slow') ? Array(200).fill(0) : four(VARS[k].d[nm], 200);
+  const jointAng = k => { const Dk = MOD(k).D, th = dOf(k, 'th'), sh = dOf(k, 'sh'), ft = dOf(k, 'ft'), h = four(Dk.hip, 200), kn = four(Dk.knee, 200), an = four(Dk.ank, 200);
+    return { hip: h.map((v, i) => v + th[i]), knee: kn.map((v, i) => v + th[i] - sh[i]), ank: an.map((v, i) => v + ft[i] - sh[i]) }; };
+  const JA = {}; for (const k of ORDER) JA[k] = jointAng(k);
+  const draws = [];
+  const ang = document.getElementById('angCharts'), pow = document.getElementById('powCharts'), grf = document.getElementById('grfCharts');
+  const pair = (fn, extra) => () => { const rk = REF(cur), out = extra ? extra(rk) : []; out.push({ y: fn(rk), col: 'mute', dash: [6, 4], w: 1.5 }); out.push({ y: fn(cur), col: 'acc' }); return out; };
+  const DD = k => MOD(k).D;
+  draws.push(chart(ang, '股関節', '度、屈曲が正', pair(k => JA[k].hip, rk => [{ y: four(DD(rk).hip, 100), band: DD(rk).sd_hip }])));
+  draws.push(chart(ang, '膝関節', '度、屈曲が正', pair(k => JA[k].knee, rk => [{ y: four(DD(rk).knee, 100), band: DD(rk).sd_knee }])));
+  draws.push(chart(ang, '足関節', '度、背屈が正', pair(k => JA[k].ank, rk => [{ y: four(DD(rk).ank, 100), band: DD(rk).sd_ank }]), { step: 5 }));
+  draws.push(chart(ang, 'MTP関節', '度、背屈が正', pair(k => EXTRA[k].MTP), { lo: 0, step: 10 }));
+  // 実測の関節パワー（モーメント×角速度）
+  const T0 = P0.T;
+  const measPow = Dk => { const T = Dk.T || 1.066, dd = arr => arr.map((_, i) => (arr[(i + 1) % 100] - arr[(i + 99) % 100]) / (2 * T / 100) * RAD);
+    const mA = four(Dk.ank, 100), mK = four(Dk.knee, 100), mH = four(Dk.hip, 100);
+    return { a: Dk.meas_ma.map((m, i) => -m * dd(mA)[i]), k: Dk.meas_mk.map((m, i) => -m * dd(mK)[i]), h: Dk.meas_mh.map((m, i) => m * dd(mH)[i]), T }; };
+  const MP = { base: measPow(K.D), slow: measPow(KS.D) };
+  const measP = MP.base;
+  draws.push(chart(pow, '足首', 'W/kg', pair(k => SIM[k].J[0].Pa, rk => [{ y: MP[rk].a, col: 'meas', dash: [2, 3] }]), { step: 0.5 }));
+  draws.push(chart(pow, '膝', 'W/kg', pair(k => SIM[k].J[0].Pk, rk => [{ y: MP[rk].k, col: 'meas', dash: [2, 3] }]), { step: 0.5 }));
+  draws.push(chart(pow, '股関節', 'W/kg', pair(k => SIM[k].J[0].Ph, rk => [{ y: MP[rk].h, col: 'meas', dash: [2, 3] }]), { step: 0.5 }));
+  const measTot = a => Array.from({ length: 100 }, (_, i) => a[i] + a[(i + 50) % 100]);
+  draws.push(chart(grf, '上下', '体重の倍', pair(k => SIM[k].Fz.map(v => v / P0.g), rk => [{ y: measTot(DD(rk).meas_fy).map(v => v / P0.g), col: 'meas', dash: [2, 3] }]), { step: 0.2, lo: 0.6, hi: 1.4 }));
+  draws.push(chart(grf, '前後', '体重の倍、前向きが正', pair(k => SIM[k].Fx.map(v => v / P0.g), rk => [{ y: measTot(DD(rk).meas_fx).map(v => v / P0.g), col: 'meas', dash: [2, 3] }]), { step: 0.05 }));
+
+  // ---- 区間ごとの仕事（右脚）----
+  const binWork = (k, from, to, key) => { const r = SIM[k]; let s = 0; for (let j = 0; j < N; j++) { const p = r.R[j].ph[0]; if (p >= from && p < to) s += r.J[0][key][j] * r.dt; } return s; };
+  const binCom = (k, from, to, sign) => { const r = SIM[k]; let s = 0; for (let j = 0; j < N; j++) { const p = r.R[j].ph[0]; if (p >= from && p < to) { const f = r.Fleg[j][0], pw = f[0] * r.vx[j] + f[1] * r.vz[j]; if (sign * pw > 0) s += pw * r.dt; } } return s; };
+
+  // ---- 指標の表 ----
+  const mz = measTot(D.meas_fy), mx = measTot(D.meas_fx);
+  const ROWS = [
+    ['速さ', 'm/s', I => I.v, 2, 0],
+    ['重複歩距離', 'm', I => I.L, 2, 0],
+    ['歩調', '歩/分', I => I.cadence, 0, 0],
+    ['両脚支持（1回分）', '%', I => I.DS * 100, 1, 0],
+    ['重心の上下の幅', 'cm', I => I.comRange * 100, 1, 1],
+    ['上下の反力の最大', '体重', I => I.fzMax, 2, 1],
+    ['ブレーキの最大', '体重', I => -I.brake, 3, 1],
+    ['推進の最大', '体重', I => I.prop, 3, 0],
+    ['重心の正の仕事（1 m あたり）', 'J/kg/m', I => I.posPerM, 3, 1],
+    ['着地の衝突（接地から15%の負の仕事、両脚）', 'J/kg', I => -I.coll, 3, 1],
+    ['押し出し（40%〜離地の正の仕事、両脚）', 'J/kg', I => I.push, 3, 0],
+    ['足首の正の仕事（右脚、一周期）', 'J/kg', I => I.jw.ank[0], 3, 0],
+    ['膝の正の仕事', 'J/kg', I => I.jw.knee[0], 3, 1],
+    ['股関節の正の仕事', 'J/kg', I => I.jw.hip[0], 3, 0],
+    ['股関節の負の仕事（腸腰筋が伸ばされる側）', 'J/kg', I => -I.jw.hip[1], 3, 0],
+    ['接地の瞬間の足裏の下向きの速さ', 'm/s', I => -I.impactVz, 2, 1],
+    ['太ももが後ろへ伸びる最大の角度', '度', I => -I.thMin, 1, 0],
+    ['立脚中の足首の最大背屈', '度', I => I.ankMax, 1, 0],
+  ];
+  function buildTable() {
+    const th = `<tr><th>指標</th>${ORDER.map(k => `<th class="${k === cur ? 'cur' : ''}">${nameOf(k)}</th>`).join('')}<th>単位</th></tr>`;
+    document.querySelector('#idx thead').innerHTML = th;
+    document.querySelector('#idx tbody').innerHTML = ROWS.map(([nm, u, f, dg, bad]) => {
+      const cells = ORDER.map(k => { const v = f(IDX[k]), b = f(IDX[REF(k)]); let cls = 'n' + (k === cur ? ' cur' : ''); const isVar = k !== 'base' && k !== 'slow'; if (bad && isVar && Math.abs(b) > 1e-9 && Math.abs(v / b - 1) >= 0.1) cls += v > b ? ' up' : ' down'; return `<td class="${cls}">${v.toFixed(dg)}</td>`; }).join('');
+      return `<tr><td>${nm}</td>${cells}<td>${u}</td></tr>`;
+    }).join('');
+  }
+
+  // ---- 条件の表 ----
+  const Cc = VARS.AB.C;
+  const cond = [
+    ['前足の設置姿勢は、振り子のように振り出した姿勢ではなく、わずかにアキレス腱を伸ばすような姿勢に変わる', `接地の瞬間、足の傾きは ±${Cc.ft0}° 以内（足裏水平）。足首の角度は条件にしない（10-29 夜に外した。前は背屈 5° 以上）`, '足裏水平'],
+    ['前足で接地＝足首の背屈に伴い、接地後に一度曲がる（膝抜き）', `接地から周期の20%までに、膝が接地の時より 10° 以上曲がる（両方は 10〜30° から選ぶ）。接地から30%まで足の傾きは ±${Cc.flatFt}° 以内（足裏を床に付けたまま）`, '足裏水平'],
+    ['遊脚は、落下を遅らすため地面と水平に近い角度でわずかに浮かし続ける（ホバークラフトのように）', `離れて周期の5%後から85%まで、足の傾き ±${Cc.swFt}° 以内・足の高い所 ${Cc.swHi * 100} cm 以下。85%から接地までは、足の傾き ±${Cc.hovFt}° 以内、足の低い所 ${Cc.hovLo * 100} cm 以上（97%まで）、高い所 ${Cc.hovHi * 100} cm 以下`, '足裏水平'],
+    ['後ろ足の背屈（アンクルロッカーを積極的に増大）。足首の背屈は継続。意識的に蹴る操作ではない', `立脚の15%から離れるまで、足首は底屈に戻らない（背屈は増えても変わらなくてもよい）。離れる時の背屈 15° 以上という条件は 10-29 夜に外した`, '蹴らない'],
+    ['（10-28 夜）この2枚の動きの後ろ足が異なります。後ろ足の背屈を作れていません', `離れてから周期の20%の間、足首は離れた時より ${Cc.swDrop}° 以上は底屈しない（前は背屈 10° 以上）。その後の遊脚も底屈しない（背屈 ${Cc.ankSw2}° 以上）`, '蹴らない'],
+    ['後ろ接地足が遊脚に代わる瞬間＝前の遊脚が接地足に切り替わる。反力ベクトルが一気に切り替わる', '両脚支持を周期の1%にする（ふつうは12.2%）', '蹴らない'],
+    ['接地から離れることができない後ろ足は「伸展させられる」。膝も伸びるし、腸腰筋の伸展がうまれる', '条件にはしない。結果（太ももが後ろへ伸びる角度、股関節の負の仕事）で見る', '—'],
+    ['（10-29 朝）カクカクが取れたら、多分理想の歩行のベースモデルです。着地時のかかとを大げさに設定した影響でしょうね', `着地の瞬間に、後ろ足から決めた骨盤の速さと、前足から決めた骨盤の速さの差を、前後・上下とも ${VARS.AB.SWV} m/s 以内にする（10-28 夜の版は前後の差が 0.6〜0.7 m/s あった）`, '全部'],
+    ['（10-29 夜）地面設置時に足首の角度が不自然に変わる。→基本的に、足裏に圧がかかるので、足裏は表面的には水平でよい。（MP関節を置く場合は、重心移動に伴い可動するのでかかとは浮く）', `荷重中（接地から周期の30%まで）の足の傾きを ±${Cc.flatFt}° 以内にした（前は ±3°）。30%より後は踵が浮くのを止めず、浮けば MTP を軸に回る。足首の角度の条件は外し、足首は足裏と脛の向きから決まる結果にした`, '足裏水平'],
+    ['（10-29 夜）膝の抜きが不足。もっと深く曲げることで前方移動が生まれ、追い抜きからの膝伸ばしでの加速が生まれる', '膝の抜きの深さを 10・15・20・25・30° から選ぶ（接地から、膝が最も曲がるまでに増える角度）', '両方'],
+    ['（10-30）設置時に移動ベクトルの逆モーションが生まれていますね。進まないことと、戻ってしまうことは別問題', `浮いている脚の膝・足首・踵・MTP と骨盤は、床に対して後ろへ動かない（前への速さ 0 以上）。前の版は、前足が着いた直後に、離れたばかりの後ろ足が最大 ${f2(backMax(SIM3.AB))} m/s で後ろへ戻っていた`, '全部'],
+    ['（10-30）本来、前足が遊脚から支持脚に変わる瞬間に重心移動が起きて前方へ加速、その加速を膝曲げが助けなきゃいけないのに、わずかに膝を曲げその後、体の重心が支持足である前足を追い越す前に足を伸ばすからおかしなことになる', '膝は、全身の重心が前足の接地点を越えるまで伸ばさない（それまでの最大から 0.5° 以上伸びない）。接地で荷重を抜く（重心が落ちる）のを許すため、骨盤の上下の加速度の上限を 0.5 g から 1.0 g にした。比べるために「すぐ伸ばす」も残した', '両方'],
+    ['（10-30 朝）腰の位置を数センチ低くして、その分後ろ足が上ではなく前に伸びる空間が確保できれば、少し歩幅は広くなり速度が得られるはずです', '骨盤の高さの一周期の平均に上限を置く（基本練習形より 2 cm・4 cm 低く）。そのうえで、条件をすべて満たす最も長い重複歩を 5 cm 刻みで探す。歩調は同じなので、歩幅が伸びた分だけ速くなる。腰の高さを指定しない（上限は基本練習形の高さ）で歩幅だけ伸ばした歩きも比べる', '両方'],
+    ['（10-30 朝）カクカク防止に背屈を制限しているはずなので、MP関節のない限界に近いかもしれません', `足首の背屈の上限 ${Cc.ankROM}° は、カクつきのためではなく、関節の動く範囲として置いた値（設定）。基本練習形では、遊脚で 25° に達していた（効いていた）。上限を 35° にした計算も足した`, '両方'],
+    ['（共通）', `歩調はふつうの歩きと同じ（${IDX.base.cadence.toFixed(0)} 歩/分）。歩幅は 10-28 夜の版の結果にそろえた（足裏水平 ${VARS.A.LT} m、蹴らない ${VARS.B.LT} m、両方 ${VARS.AB.LT} m）。足首の背屈は ${Cc.ankROM}° まで。膝は反らない。遊脚の中ほどで足は ${Cc.clr * 100} cm 以上浮く`, '全部'],
+  ];
+  document.querySelector('#cond tbody').innerHTML = cond.map(r => `<tr><td class="quote">${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+
+  // ---- 結果の読み・別理論 ----
+  const pc = (a, b) => ((a / b - 1) * 100).toFixed(0), tm = (a, b) => (a / b).toFixed(1);
+  const IB = IDX.base, IS = IDX.slow, IA = IDX.A, IBk = IDX.B, IAB = IDX.AB;
+  const kneeS = binWork('slow', 0.15, 0.3, 'Pk'), kneeAB = binWork('AB', 0.15, 0.3, 'Pk');
+  const ankPushB = binWork('base', 0.5, 0.65, 'Pa');
+  const comEarlyB = binCom('base', 0.15, 0.3, 1), comEarlyBk = binCom('B', 0.15, 0.3, 1);
+  const comLateB = binCom('base', 0.5, 0.65, 1), comLateBk = binCom('B', 0.5, 0.65, 1);
+  const kneeIC = Math.round(JA.AB.knee[0]), kneeICs = Math.round(JA.slow.knee[0]) || 0;
+  let jpk = 0; for (let j = 0; j < N * 0.35; j++) if (SIM.AB.Fz[j] > SIM.AB.Fz[jpk]) jpk = j;
+  const fzPkAt = (jpk / N * 100).toFixed(0);
+  // 後ろ足：離れる時と離れた後の足首
+  const swingStat = k => { const r = SIM[k], TO = r.P.TO; let aTO = null, aMin = 1e9, ftMin = 1e9;
+    r.R.forEach(s => { const p = s.ph[0], a = s.A[0], an = a.ft - a.sh; if (aTO === null && p >= TO) aTO = an; if (p >= TO && p < TO + 0.2) { aMin = Math.min(aMin, an); ftMin = Math.min(ftMin, a.ft); } });
+    return { aTO, aMin, ftMin }; };
+  const swAB = swingStat('AB'), swN = swingStat('base');
+  const sp = (a, b) => { const v = (a / b - 1) * 100; return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(0) + '%'; };
+  const wari = (a, b) => { const q = a / b; return q < 0.1 ? 'ほぼ0' : `約${Math.round(q * 10)}割`; };
+  // 荷重中の前足：接地から30%の足の傾きの幅と、圧の点が足裏の上を動く幅
+  const flatStat = r => { let lo = 1e9, hi = -1e9, clo = 1e9, chi = -1e9; r.R.forEach(s => { if (s.ph[0] <= 0.3 && s.info[0]) { lo = Math.min(lo, s.A[0].ft); hi = Math.max(hi, s.A[0].ft); clo = Math.min(clo, s.info[0].cx); chi = Math.max(chi, s.info[0].cx); } }); return { lo, hi, cop: chi - clo }; };
+  const FS3 = flatStat(SIM3.AB), FS = flatStat(SIM.AB);
+  const swAB2 = (() => { const r = SIM.AB, TO = r.P.TO; let aMax = -1e9, shMin = 1e9; r.R.forEach(s => { const p = s.ph[0], a = s.A[0]; if (p >= TO && p < TO + 0.2) { aMax = Math.max(aMax, a.ft - a.sh); shMin = Math.min(shMin, a.sh); } }); return { aMax, shMin }; })();
+  const ank0AB = JA.AB.ank[0];
+  // 比べる土台より正の仕事がより多く増えた関節（膝か股関節）
+  const jointMore = (k, rk) => { const dk = IDX[k].jw.knee[0] - IDX[rk].jw.knee[0], dh = IDX[k].jw.hip[0] - IDX[rk].jw.hip[0]; return dk >= dh ? '膝' : '股関節'; };
+  const KSs = kneeStats(SIM.slow, p => KS.angles(p, {}));
+  const KS3 = kneeStats(SIM3.AB, p => K.angles(p, { d: VARS.prev.AB.d, TO: VARS.prev.AB.TO })), KSn = kneeStats(SIM.AB, p => K.angles(p, { d: VARS.AB.d, TO: VARS.AB.TO }));
+  document.getElementById('find').innerHTML = `
+    <p class="note">この節の両方は、膝の抜き 10°・重心が前足を越えるまで曲げる、の歩きです。膝の抜きを変えた歩きは次の節にあります。</p>
+    <p><b>後ろ足は、床に対して後ろへ戻らなくなりました。</b>前の版では、前足が着いた直後に、離れたばかりの後ろ足（膝・足首・踵・MTP のどれか）が最大 ${f2(backMax(SIM3.AB))} m/s で後ろへ戻っていました。今は ${f2(backMax(SIM.AB))} m/s です。蹴らないも ${f2(backMax(SIM3.B))} → ${f2(backMax(SIM.B))} m/s です。</p>
+    <p><b>膝は、重心が前足を越えるまで曲がり続けます。</b>前の版は、膝が最も曲がるのが周期 ${f2(KS3.kp * 100, 0)}%、重心が前足の接地点を越えるのが ${f2(KS3.tp * 100, 0)}% で、越える前に膝を伸ばし始めていました。今は、膝が伸び始める（最大から 2° 下がる）のが周期 ${KSn.kx ? f2(KSn.kx * 100, 0) : '—'}%、重心が越えるのが ${f2(KSn.tp * 100, 0)}% です（前の版は伸び始めが ${KS3.kx ? f2(KS3.kx * 100, 0) : '—'}%）。重心が越えるまでのブレーキの最大は ${f2(-KS3.brk, 3)} → ${f2(-KSn.brk, 3)} 体重、その間の上下の反力の最小は ${f2(KS3.fzMin)} → ${f2(KSn.fzMin)} 体重です。</p>
+    <p><b>荷重中の前足の足裏は平らです。</b>接地から周期の30%までの足の傾きは ${f2(FS.lo, 1)}〜${f2(FS.hi, 1)}°、圧の点が足裏の上を動く幅は ${f2(FS.cop * 100, 1)} cm です。接地の瞬間の足首は背屈 ${f2(ank0AB, 0)}° で、これは条件ではなく脛の傾きから決まった値です。</p>
+    <p><b>後ろ足の足首は、離れた後にまだ大きく変わります。</b>離れる瞬間は背屈 ${f2(swAB.aTO, 0)}°、離れてから周期の20%の間に最大 ${f2(swAB2.aMax, 0)}° です。遊脚の足をほぼ水平（±10° 以内）に保つ条件と、その時に脛が ${f2(-swAB2.shMin, 0)}° 前へ傾いていることから出ます（足の傾き＝脛の傾き＋足首の角度）。【推論】田代さんの言う「不自然に変わる足首」がこちらなら、遊脚の足を水平にする条件を、離れてすぐではなく少し後から始めると小さくなります。</p>
+    <p><b>蹴らない（ふつうと同じ ${f2(IBk.v)} m/s）。</b>足首の正の仕事（右脚、一周期）は ${f2(IB.jw.ank[0], 3)} → ${f2(IBk.jw.ank[0], 3)} J/kg。ふつうの歩きでは、その大半（${f2(ankPushB, 3)} J/kg）が周期の50〜65%、前の足が着いた後の両脚支持の間に出ます。前の足が着いた瞬間に後ろ足が離れると、この押し出しの時間が無くなります。代わりに股関節の正の仕事が ${f2(IB.jw.hip[0], 3)} → ${f2(IBk.jw.hip[0], 3)}、膝が ${f2(IB.jw.knee[0], 3)} → ${f2(IBk.jw.knee[0], 3)} J/kg に増えました。重心への正の仕事（右脚）は、50〜65%が ${f2(comLateB, 3)} → ${f2(comLateBk, 3)}、15〜30%が ${f2(comEarlyB, 3)} → ${f2(comEarlyBk, 3)} J/kg と、接地の後へ移りました。重心の正の仕事（1 m あたり）は ${sp(IBk.posPerM, IB.posPerM)}、着地の衝突は ${sp(IBk.coll, IB.coll)}、ブレーキの最大は ${sp(IBk.brake, IB.brake)} です。</p>
+    <p><b>両方（${f2(IAB.v)} m/s）を、速さの近いゆっくり歩き（${f2(IS.v)} m/s）と比べると。</b>右脚の一周期の正の仕事は、足首 ${f2(IS.jw.ank[0], 3)} → ${f2(IAB.jw.ank[0], 3)}、膝 ${f2(IS.jw.knee[0], 3)} → ${f2(IAB.jw.knee[0], 3)}、股関節 ${f2(IS.jw.hip[0], 3)} → ${f2(IAB.jw.hip[0], 3)} J/kg です。足首の代わりに${jointMore('AB', 'slow')}が多く仕事をしています。重心が前足を越えてから離れるまでの膝の正の仕事は ${f2(KSs.kw, 3)} → ${f2(KSn.kw, 3)} J/kg です。股関節の負の仕事（腸腰筋などが伸ばされながら力を出す側）は ${f2(-IS.jw.hip[1], 3)} → ${f2(-IAB.jw.hip[1], 3)} J/kg です。</p>
+    <p><b>そのかわり、重心の仕事は大きく増えます。</b>重心の正の仕事（1 m あたり）は ${f2(IS.posPerM, 3)} → ${f2(IAB.posPerM, 3)} J/kg/m（${tm(IAB.posPerM, IS.posPerM)}倍）、着地の衝突は ${f2(-IS.coll, 3)} → ${f2(-IAB.coll, 3)} J/kg、上下の反力の最大は ${f2(IS.fzMax)} → ${f2(IAB.fzMax)} 体重です。接地の膝は ${kneeIC}° 曲がっています（ゆっくり歩き ${Math.abs(kneeICs) < 2 ? 'ほぼ0' : kneeICs}°）。</p>
+    <p><b>足裏水平だけ（${f2(IA.v)} m/s）</b>では、足首の正の仕事は ${f2(IS.jw.ank[0], 3)} → ${f2(IA.jw.ank[0], 3)} J/kg と、ゆっくり歩きの${wari(IA.jw.ank[0], IS.jw.ank[0])}です。遊脚の足を水平に保つ条件があるため、離れる時に大きく底屈できません。膝の正の仕事は ${f2(IS.jw.knee[0], 3)} → ${f2(IA.jw.knee[0], 3)} J/kg です。</p>
+    <p class="note">【推論】足首で押す仕事が減ると、その分を膝や股関節が受け持つ形は、どの組み合わせでも出ました。比べる土台より仕事が多く増えたのは、蹴らないでは${jointMore('B', 'base')}、足裏水平では${jointMore('A', 'slow')}、両方では${jointMore('AB', 'slow')}です。足首の押し出しが減る理由は二つです。両脚支持が無いこと（蹴らない）と、離れる足を水平に保つこと（足裏水平）です。</p>
+    <p class="note">歩幅は、10-28 夜の版で結果として出た値（足裏水平 ${f2(IA.L)} m、両方 ${f2(IAB.L)} m）にそろえています（ふつう ${f2(IB.L)} m）。その版では、歩幅をふつうの歩き（1.23 m）やゆっくり歩き（1.05 m）と同じにすると、両方の条件を満たす歩きは見つかりませんでした。田代さんの条件は、短い歩幅に向いています。</p>`;
+  document.getElementById('theory').innerHTML = `
+    <p>【推論】ここまでの模型は、ふつうの歩きから出発して、田代さんの言葉を条件として足した歩きです（次の「ロッカー理論のままか」も見てください）。違いが出たのは「重心を前へ運ぶ正の仕事を、どの関節が、周期のどこで出すか」でした。別理論と言えるには、次の4つが要ると考えます。</p>
+    <ol>
+      <li><b>推進の源を一つの言い方で決める。</b>ふつうの説では、着地で失う分を、両脚支持の間の後ろ足の足首の押し出しで補います。模型の「両方」（膝 10°・重心が越えるまで曲げる）では、足首の代わりに${jointMore('AB', 'slow')}の仕事が増え、前への力は重心が前足を越えた後（周期 ${f2(KSn.tp * 100, 0)}% から）に出ました。田代さんの説を「膝抜きのあとの膝の伸び（と、伸ばされた股関節の屈筋の戻り）で補う」と言い切れるかを、まず決めます。</li>
+      <li><b>ふつうの説と逆になる予測を一つ以上持つ。</b>Kuo の最も簡単な歩行の模型では、着地の直前に後ろ足で押す（押し出し）と着地の衝突が小さくなり、立脚の脚にトルクをかけて進むより費用が4分の1で済む、とされています（検索で確認した要旨による）。この模型では、蹴らないだけ（同じ速さ）なら、重心の正の仕事は ${sp(IBk.posPerM, IB.posPerM)}、衝突は ${sp(IBk.coll, IB.coll)} とあまり変わらず、足首の代わりに股関節と膝が仕事をしました。両方では、重心の正の仕事がゆっくり歩きの ${tm(IAB.posPerM, IS.posPerM)}倍、衝突が ${tm(IAB.coll, IS.coll)}倍になりました。田代さんの説が「蹴らなくても費用が増えない」と主張するなら、両方の歩きで増える分を何が補うかを示す必要があります。</li>
+      <li><b>その仕組みを模型に入れる。</b>いまの模型には、筋や腱のばね（伸ばされた所で蓄え、縮む時に返す）が入っていません。田代さんの「腸腰筋の伸展」「反射」は、ばねとして入れられる候補です。ばねを入れると、膝と股関節の仕事のうち、どれだけを返せるかが計算できます。</li>
+      <li><b>同じ人で測って、差の向きを確かめる。</b>同じ人が、ゆっくりのふつうの歩きと田代さんの歩きを、同じくらいの速さで歩きます。模型の予測は「両脚支持がほぼ0になる」「接地の膝が ${kneeIC}° ほど曲がる」「後ろ足が離れる時も背屈 ${f2(swAB.aTO, 0)}° 前後」「足首の押し出しの山（周期50〜60%）が消える」です。前の3つは、真横の動画（240 fps）で測れます。4つ目には床反力計が要ります。</li>
+    </ol>
+    <p class="note">検証の方法を一つ：同じ人の2つの歩き方を、真横から同時に（または同じ場所で続けて）撮り、仙骨の高さの点の前への速さを一歩ごとに測ります。模型の予測では、両方の歩きは着地の前後で前への速さが ${f2(SIM.AB.swV.trail[0])} → ${f2(SIM.AB.swV.lead[0])} m/s とほとんど落ちません。10-28 夜の版のように着地で骨盤が急に止まるなら、実際の歩きにも衝突があることになります。スマホを仙骨に付けた上下の加速度なら、山の高さ（模型では ${f2(IAB.fzMax)} 体重、ゆっくり歩き ${f2(IS.fzMax)}）と位置（接地から約${fzPkAt}%）でも比べられます。</p>`;
+
+  // ---- 模型の確かさ ----
+  const rms = (a, b) => Math.sqrt(a.reduce((s, v, i) => s + (v - b[i]) ** 2, 0) / a.length);
+  const pick100 = arr => Array.from({ length: 100 }, (_, i) => arr[Math.round(i / 100 * N) % N]);
+  const rb = SIM.base, Jb = rb.J[0];
+  const eFz = rms(pick100(rb.Fz), mz) / P0.g, eFx = rms(pick100(rb.Fx), mx) / P0.g;
+  const vrows = [
+    ['土台の重複歩距離', `${((IB.L / MEAS.L - 1) * 100).toFixed(1)} %`, '実測より短い。平均した角度で作った体なので、関節の動きの幅がやや小さく出る、と推測'],
+    ['土台の上下の反力', `${eFz.toFixed(3)} 体重`, '実測の平均との二乗平均のずれ'],
+    ['土台の前後の反力', `${eFx.toFixed(3)} 体重`, '同じく'],
+    ['土台の足首のモーメント', `${rms(pick100(Jb.Ma), D.meas_ma).toFixed(2)} N·m/kg`, `二乗平均のずれ。実測の最大は ${Math.max(...D.meas_ma).toFixed(2)}`],
+    ['土台の膝のモーメント', `${rms(pick100(Jb.Mk), D.meas_mk).toFixed(2)} N·m/kg`, `同じく。実測の最大は ${Math.max(...D.meas_mk).toFixed(2)}`],
+    ['土台の股関節のモーメント', `${rms(pick100(Jb.Mh), D.meas_mh).toFixed(2)} N·m/kg`, '合いが悪い。反力が重心を通るとした仮定と、上体が回らないことのため。立脚の後半の股関節の負の仕事（腸腰筋が伸ばされる側）は、実測の約1割しか出ない'],
+    ['ゆっくり歩きの速さ', `${IS.v.toFixed(2)} m/s`, `同じ人たちのマーカーの実測は ${VARS.slowMeas.v} m/s（重複歩距離 ${VARS.slowMeas.L} m、周期 ${VARS.slowMeas.T} s）`],
+    ['着地の接地点の浮き', ORDER.map(k => (IDX[k].icErr * 1000).toFixed(0)).join(' / ') + ' mm', 'ふつう・ゆっくり・足裏水平・蹴らない・両方の順。変数の歩きは 3 mm 以内を条件にした。ふつう・ゆっくりは実測の平均の角度から作ったため閉じず、この浮きの分だけ着地で骨盤が 1 cm ほど下がる小さな揺れが絵に出る（直していない）'],
+    ['着地の骨盤の速さの食い違い', ORDER.map(k => f2(SIM[k].swV.dv[0])).join(' / ') + ' m/s', '前後。前足から決めた速さ−後ろ足から決めた速さ。同じ順。変数の歩きは 0.1 m/s 以内を条件にした（前の版は ' + VAR3.map(k => f2(SIM3[k].swV.dv[0])).join(' / ') + '）'],
+    ['一周期の骨盤の前への速さ', ORDER.map(k => vRange(SIM[k]).map(v => f2(v)).join('〜')).join(' / ') + ' m/s', 'ならさない値の最小〜最大。同じ順'],
+    ['立脚の足の滑り', ORDER.map(k => (IDX[k].slip * 1000).toFixed(0)).join(' / ') + ' mm', '後ろの脚から骨盤を決めない区間で、後ろ足が接地点から離れる量'],
+    ['圧の中心の調整', ORDER.map(k => (IDX[k].dCop * 1000).toFixed(0)).join(' / ') + ' mm', '一周期で前後の力の和が0になるよう、接地点を一律に前へずらした量（負は後ろ）'],
+    ['変数の歩きの作り方', '土台に近いもの', '条件を満たす中で、いちばん小さい変更。田代さんの歩きの最善の形とは限らない。探し方によって、もっと大きな変更の答えに落ちることがある（前の版のカクつきはその例）'],
+  ];
+  document.querySelector('#val tbody').innerHTML = vrows.map(r => `<tr><td>${r[0]}</td><td class="n">${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+  const srows = [
+    ['関節角度（股・膝・足首）と骨盤', '若年24人×左右', 'm', '床の上をふつうの速さで歩いた平均（公開データ）'],
+    ['関節のモーメント', '同上', 'm', '同じデータの計算値。模型の確かめに使う'],
+    ['ゆっくり歩き', `周期 ${SIM.slow.P.T.toFixed(2)} s、離地 ${(SIM.slow.P.TO * 100).toFixed(1)}%`, 'm', '同じ人たちが約30%遅く歩いた平均（同じ公開データ）'],
+    ['周期の時間', P0.T.toFixed(3) + ' s', 'm', 'ふつうの速さのマーカーから（165周期）。変数の歩きも同じ'],
+    ['離地', (P0.TO * 100).toFixed(1) + ' %', 'm', '床反力計の上下の力から。蹴らない・両方は 51%（c）'],
+    ['太もも／すね', `${P0.Lt} / ${P0.Ls} m`, 'm', '大転子→膝の外側、膝→外くるぶしのマーカー間（20人）'],
+    ['足首の高さ・踵・MTP', `${P0.ha} / ${P0.hb} / ${P0.mf} m`, 'm', '足裏を床に付けた時のマーカーの位置'],
+    ['体節の重さの割合', '上体0.678・太もも0.100・すね0.0465・足0.0145', 's', 'Winter（Dempster）'],
+    ['体節の重心の位置・回転半径', '0.433・0.433・0.5／0.323・0.302・0.475', 's', '同上'],
+    ['変数の条件の数', '上の「模型の条件」の表', 'c', '田代さんの言葉から北野さん・Claude が置いた値'],
+    ['着地の速さの食い違いの上限', VARS.AB.SWV + ' m/s', 'c', '10-29 に足した条件（前後・上下とも）'],
+    ['変数の歩きの歩幅', `${VARS.A.LT} / ${VARS.B.LT} / ${VARS.AB.LT} m`, 'c', '足裏水平・蹴らない・両方。10-28 夜の版で結果として出た値にそろえた'],
+    ['荷重中の足裏の平らさ', '±' + Cc.flatFt + '°（接地から周期の30%まで）', 'c', '10-29 夜に足した（前は ±3°）'],
+    ['両方の膝の抜きの深さ', '10・15・20・25・30°', 'c', '接地から、膝が最も曲がるまでに増える角度'],
+    ['膝を伸ばし始める時', '重心が前足の接地点を越えた後（周期の26〜38%）', 'c', '10-30 に足した（田代さん 0:45）。比べるための「すぐ伸ばす」もある'],
+    ['骨盤の上下の加速度の上限', '±1.0 g', 'c', '10-30 に ±0.5 g から緩めた。接地で荷重を抜くのを許すため'],
+    ['足首の背屈の上限', '25°（基本）／35°', 'c', '関節の動く範囲として置いた値。正常値の文献は今回確認できなかった'],
+    ['腰の高さの上限', '基本練習形 81.8 cm から 2・4 cm 低く', 'c', '骨盤の高さの一周期の平均。10-30 に足した'],
+    ['歩幅を探す刻み', '重複歩 5 cm', 'c', '条件のはみ出しが 0.5° または 1 mm を超えたら「外れた」とした'],
+    ['後ろへ戻らない', '前への速さ 0 以上', 'c', '浮いている脚の膝・足首・踵・MTP と骨盤。10-30 に足した'],
+    ['変更分の三角級数の次数', '7次（一部 9次）', 'c', '10-29 朝の版は 5次'],
+    ['骨盤の回旋・傾きのてこの幅', P0.W + ' m', 'r', '左右の上前腸骨棘の間の実測を借用'],
+    ['上体の重心の高さ', P0.hatH + ' m', 'r', '骨盤の中心の上。肩の高さを確認できていないため推定'],
+    ['足裏が平らとみなす傾き', '±' + P0.eps + '°', 'c', 'アンクルロッカーの範囲を決める'],
+    ['ならし', '4次（約3.8 Hz）', 'c', '加速度の細かい揺れを弱める'],
+    ['腱のばねの硬さ（試し）', `足首 ${VARS.EXP.kB.ank}・膝 ${VARS.EXP.kB.knee}・股 ${VARS.EXP.kB.hip} N·m/rad/kg`, 'a', '模型のふつうの歩きで、筋の正の仕事が最も小さくなる値。実測に合わせると 足首 ' + VARS.EXP.kM.ank + '・膝 ' + VARS.EXP.kM.knee + '・股 ' + VARS.EXP.kM.hip],
+    ['アキレス腱は単脚支持の間にゆっくり伸び、接地の終わりに速く戻る（カタパルトのような働き）', '健常男性8人、約1.4 m/s', 's', 'Ishikawa ら 2005 J Appl Physiol 99(2):603–608（要旨による）'],
+    ['受動的な弾性の寄与', '股関節の屈曲モーメントの山の約35%、足首の底屈の約21%', 's', 'Whittington ら Gait & Posture 27(4):628–634（オンライン 2007。要旨による）'],
+    ['蹴らない（筋が押さない）の上限', '足首の筋の正の仕事 0.01 J/kg', 'c', '試しの設定'],
+    ['腱の蓄えを捨てない', '足首の筋が吸収する仕事 0.03 J/kg 以下', 'c', '試しの設定'],
+    ['圧の中心のずらし', '上の表', 'a', '前後の力の釣り合いのため'],
+  ];
+  document.querySelector('#src tbody').innerHTML = srows.map(r => `<tr><td>${r[0]}</td><td class="n" style="text-align:left;white-space:normal">${r[1]}</td><td><span class="tag ${r[2]}">${r[2]}</span></td><td>${r[3]}</td></tr>`).join('');
+
+  // ---- 前の版との違い ----
+  {
+    const D3 = [
+      ['離れた後の後ろ足が後ろへ戻る速さの最大', 'm/s', S => f2(backMax(S))],
+      ['膝の最大の時／重心が前足を越える時', '周期の%', (S, I, k) => { const v = k === 'base' || k === 'slow' ? {} : (S === SIM3[k] ? VARS.prev[k] : VARS[k]); const q = kneeStats(S, p => MOD(k).angles(p, v.d ? { d: v.d, TO: v.TO } : {})); return `${f2(q.kp * 100, 0)}／${q.tp ? f2(q.tp * 100, 0) : '—'}`; }],
+      ['重心が前足を越えるまでのブレーキの最大', '体重', (S, I, k) => { const v = k === 'base' || k === 'slow' ? {} : (S === SIM3[k] ? VARS.prev[k] : VARS[k]); return f2(-kneeStats(S, p => MOD(k).angles(p, v.d ? { d: v.d, TO: v.TO } : {})).brk, 3); }],
+      ['接地から30%の足の傾き（最小〜最大）', '度', S => { const q = flatStat(S); return `${f2(q.lo, 1)}〜${f2(q.hi, 1)}`; }],
+      ['着地の直前と直後の骨盤の前への速さ', 'm/s', (S, I) => `${f2(S.swV.trail[0])} と ${f2(S.swV.lead[0])}`],
+      ['一周期の骨盤の前への速さ（最小〜最大）', 'm/s', S => vRange(S).map(v => f2(v)).join('〜')],
+      ['重心の正の仕事（1 m あたり）', 'J/kg/m', (S, I) => f2(I.posPerM, 3)],
+      ['着地の衝突（接地から15%の負の仕事）', 'J/kg', (S, I) => f2(-I.coll, 3)],
+      ['負の仕事の合計（両脚、一周期）', 'J/kg', (S, I) => f2(-I.negW, 3)],
+      ['上下の反力の最大', '体重', (S, I) => f2(I.fzMax)],
+      ['足首の正の仕事', 'J/kg', (S, I) => f2(I.jw.ank[0], 3)],
+      ['膝の正の仕事', 'J/kg', (S, I) => f2(I.jw.knee[0], 3)],
+      ['股関節の正の仕事', 'J/kg', (S, I) => f2(I.jw.hip[0], 3)],
+      ['股関節の負の仕事', 'J/kg', (S, I) => f2(-I.jw.hip[1], 3)],
+    ];
+    document.querySelector('#diff thead').innerHTML = `<tr><th>指標</th>${VAR3.map(k => `<th>${NAMES[k]}<br>前 → 今</th>`).join('')}<th>比べる土台</th><th>単位</th></tr>`;
+    const rows = D3.map(([nm, u, f]) => `<tr><td>${nm}</td>${VAR3.map(k => `<td class="n chg">${f(SIM3[k], IDX3[k], k)}<br>→ ${f(SIM[k], IDX[k], k)}</td>`).join('')}<td class="n chg">ふつう ${f(SIM.base, IDX.base, 'base')}<br>ゆっくり ${f(SIM.slow, IDX.slow, 'slow')}</td><td>${u}</td></tr>`);
+    rows.push(`<tr><td>関節の動きの変更の大きさ</td>${VAR3.map(k => `<td class="n chg">${chgOf(VARS.prev[k].d).toFixed(0)}<br>→ ${chgOf(VARS[k].d).toFixed(0)}</td>`).join('')}<td class="n">0</td><td>5°で1</td></tr>`);
+    document.querySelector('#diff tbody').innerHTML = rows.join('');
+    document.getElementById('diffNote').textContent = `両方では、重心の正の仕事（1 m あたり）が ${f2(IDX3.AB.posPerM, 3)} → ${f2(IDX.AB.posPerM, 3)}、膝の正の仕事が ${f2(IDX3.AB.jw.knee[0], 3)} → ${f2(IDX.AB.jw.knee[0], 3)} J/kg、着地の衝突が ${f2(-IDX3.AB.coll, 3)} → ${f2(-IDX.AB.coll, 3)} J/kg になりました。条件を三つ同時に変えたので、どれが効いたかは分けていません。`;
+  }
+
+  // ---- 並べて歩かせる（それぞれの時間と速さで）----
+  const pcv = document.getElementById('pair'), px = pcv.getContext('2d');
+  let mate = null, pT = 0, pHold = 0, pEnd = 5, pPlay = playing;
+  const lowOf = () => mate || (cur === 'base' ? 'AB' : cur);   // 下の段（上の段はふつうに固定）
+  const markMate = () => document.querySelectorAll('#mate button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === lowOf()));
+  // 時刻 t（秒）の姿。出発の時に骨盤が x=0 にあるようにずらす
+  const poseAt = (k, t) => { const r = SIM[k], f = t / r.P.T, n = Math.floor(f), j = Math.min(r.N - 1, Math.floor((f - n) * r.N)); return { r, j, s: r.R[j], dx: n * r.L - r.R[0].pc[0] }; };
+  const pairNote = () => {
+    const ka = 'base', kb = lowOf(), a = SIM[ka], b = SIM[kb], na = NAMES[ka], nb = NAMES[kb], nbf = nameOf(kb);
+    if (ka === kb) return `上下とも${nb}です。`;
+    const dv = (b.v / a.v - 1) * 100, ca = 120 / a.P.T, cb = 120 / b.P.T;
+    const sv = Math.abs(dv) < 5 ? `下の${nbf}と上の${na}の速さはほぼ同じです` : `下の${nbf}は上の${na}より ${Math.abs(dv).toFixed(0)}% ${dv > 0 ? '速く' : '遅く'}進みます`;
+    const sc = Math.abs(cb - ca) < 1 ? '歩調は同じです' : `歩調は${nb}が ${Math.abs(cb - ca).toFixed(0)} 歩/分${cb > ca ? '多い' : '少ない'}です`;
+    return `${sv}。${sc}（${nb} ${cb.toFixed(0)}、${na} ${ca.toFixed(0)} 歩/分）。重複歩は${nb} ${f2(b.L)} m、${na} ${f2(a.L)} m です。速さは「重複歩 ÷ 一周期の時間」で決まります（${nb} ${f2(b.L)} ÷ ${f2(b.P.T)} 秒 ＝ ${f2(b.v)} m/s）。`;
+  };
+  const resetPair = () => { pT = 0; pHold = 0; document.getElementById('pairNote').textContent = pairNote(); };
+  const drawFig = (o, X, Y, kp, sc) => {
+    const { r, s, dx, j } = o, P = r.P, k = ORDER.find(q => SIM[q] === r), E = EXTRA[k];
+    px.lineCap = 'round'; px.lineJoin = 'round';
+    const hat = [s.pc[0] + dx, s.pc[1] + 0.56];
+    px.strokeStyle = C.r; px.lineWidth = 5 * kp;
+    px.beginPath(); px.moveTo(X(s.pc[0] + dx), Y(s.pc[1])); px.lineTo(X(hat[0]), Y(hat[1])); px.stroke();
+    px.beginPath(); px.arc(X(hat[0]), Y(hat[1] + 0.13), 0.1 * sc, 0, Math.PI * 2); px.lineWidth = 3.5 * kp; px.stroke();
+    for (const leg of [1, 0]) {
+      const L = s.legs[leg], a = s.A[leg];
+      px.strokeStyle = leg ? C.l : C.r; px.lineWidth = 6 * kp;
+      px.beginPath(); px.moveTo(X(L.hip[0] + dx), Y(L.hip[1])); px.lineTo(X(L.knee[0] + dx), Y(L.knee[1])); px.lineTo(X(L.ank[0] + dx), Y(L.ank[1])); px.stroke();
+      const ta = a.ft + E.mtpOf(s.ph[leg], a.ft), toe = [L.mtp[0] + P.toe * Math.cos(ta * RAD), L.mtp[1] + P.toe * Math.sin(ta * RAD)];
+      px.lineWidth = 4 * kp; px.beginPath(); px.moveTo(X(L.ank[0] + dx), Y(L.ank[1])); px.lineTo(X(L.heel[0] + dx), Y(L.heel[1])); px.lineTo(X(L.mtp[0] + dx), Y(L.mtp[1])); px.lineTo(X(toe[0] + dx), Y(toe[1])); px.closePath(); px.stroke();
+    }
+    const c = r.com[j]; px.fillStyle = C.acc; px.beginPath(); px.arc(X(c[0] + dx), Y(c[1]), 6 * kp, 0, Math.PI * 2); px.fill();
+  };
+  function drawPair() {
+    const kp = fit(pcv, w => w < 620 ? 1.25 : 0.7), fpx = n => Math.round(n * kp) + 'px ';
+    const W = pcv.width, H = pcv.height, h = H / 2, sc = (h - 64 * kp) / 1.75, visW = W / sc;
+    const ks = ['base', lowOf()], os = ks.map(k => poseAt(k, pT));
+    const dv = Math.abs(SIM[ks[0]].v - SIM[ks[1]].v);
+    pEnd = Math.max(3, Math.min(10, (visW - 1.4) / Math.max(dv, 1e-3)));
+    const xs = os.map(o => o.s.pc[0] + o.dx), camX = (xs[0] + xs[1]) / 2;
+    px.fillStyle = C.bg; px.fillRect(0, 0, W, H);
+    os.forEach((o, i) => {
+      const y0 = i * h, gy = y0 + h - 30 * kp, X = x => W / 2 + (x - camX) * sc, Y = z => gy - z * sc;
+      if (i) { px.strokeStyle = C.rule; px.lineWidth = 1; px.beginPath(); px.moveTo(0, y0); px.lineTo(W, y0); px.stroke(); }
+      px.strokeStyle = C.rule; px.lineWidth = 2; px.beginPath(); px.moveTo(0, gy); px.lineTo(W, gy); px.stroke();
+      px.fillStyle = C.mute; px.font = fpx(11) + css('--f-mono'); px.textAlign = 'center'; px.textBaseline = 'top';
+      for (let q = Math.floor((camX - visW / 2) * 10); q <= Math.ceil((camX + visW / 2) * 10); q++) {
+        const x = q / 10, big = q % 5 === 0; px.beginPath(); px.moveTo(X(x), gy); px.lineTo(X(x), gy + (big ? 8 : 4) * kp); px.stroke();
+        if (q % 10 === 0 && q >= 0) px.fillText(q / 10 + ' m', X(x), gy + 10 * kp);
+      }
+      px.strokeStyle = C.mute; px.setLineDash([4 * kp, 4 * kp]); px.lineWidth = 1.5 * kp; px.beginPath(); px.moveTo(X(0), gy); px.lineTo(X(0), gy - 1.8 * sc); px.stroke(); px.setLineDash([]);
+      drawFig(o, X, Y, kp, sc);
+      const r = o.r, k = ks[i];
+      px.textAlign = 'left'; px.textBaseline = 'alphabetic'; px.fillStyle = C.ink; px.font = '600 ' + fpx(15) + css('--f-body');
+      px.fillText((i ? '下：' : '上：') + (i ? nameOf(k) : 'ふつう（ロッカー機能の土台）'), 12 * kp, y0 + 24 * kp);
+      px.fillStyle = C.mute; px.font = fpx(12) + css('--f-mono');
+      px.fillText(`${f2(r.v)} m/s ・ ${(120 / r.P.T).toFixed(0)} 歩/分 ・ 重複歩 ${f2(r.L)} m`, 12 * kp, y0 + 42 * kp);
+      px.textAlign = 'right'; px.fillStyle = C.ink; px.font = '600 ' + fpx(13) + css('--f-mono');
+      px.fillText(`${Math.max(0, xs[i]).toFixed(2)} m`, W - 12 * kp, y0 + 24 * kp); px.textAlign = 'left';
+    });
+    document.getElementById('pRead').textContent = `経過 ${pT.toFixed(1)} 秒（模型の時間）` + (pHold > 0 ? '　もう一度出発します' : '');
+  }
+  const stepPair = dR => { if (pHold > 0) { pHold -= dR; if (pHold <= 0) { pHold = 0; pT = 0; } return; } pT += dR * speed; if (pT >= pEnd) { pT = pEnd; pHold = 1.5; } };
+  const ppb = document.getElementById('pplay');
+  const setPPlay = v => { pPlay = v; ppb.textContent = v ? '止める' : '動かす'; };
+  setPPlay(pPlay);
+  ppb.addEventListener('click', () => setPPlay(!pPlay));
+  document.getElementById('prestart').addEventListener('click', () => { resetPair(); drawPair(); });
+  document.querySelectorAll('#mate button').forEach(b => b.addEventListener('click', () => { mate = b.dataset.v; markMate(); resetPair(); drawPair(); }));
+
+  // ---- 両方の膝の抜きを選ぶ ----
+  const VLAB = { ankROM: '足首の背屈の上限', hip: '腰の高さ', slip: '立脚の足が滑らない', close: '着地の点が床に着く', swingDorsi: '離れた後の足首が底屈しない', knee: '膝の抜きの深さ', holdcom: '重心が越えるまで膝を伸ばさない', flat: '荷重中の足裏の平らさ', hover: '遊脚の終わりの足の水平', nokick: '立脚の足首が底屈に戻らない', swingFlat: '遊脚の足の水平', ankROM: '足首の背屈の限界', contact: '接地の足裏の水平', nokickF: '足首の筋が押さない', returnF: '腱の蓄えを捨てない' };
+  const abInfo = () => {
+    const v = VARS.ABV[abKey], st = kneeStats(SIM.AB, p => K.angles(p, { d: v.d, TO: v.TO })), vi = v.viol;
+    const ok = vi.deg < 0.5 && vi.mm < 1 && (vi.ms || 0) < 0.02;
+    const pre = isKnee(abKey) ? '' : `骨盤の高さの平均 ${f2(hipMean(SIM.AB), 1)} cm（基本練習形 ${f2(hipMean(ABC['10c'].sim), 1)} cm）、速さ ${f2(SIM.AB.v)} m/s。`;
+    document.getElementById('abInfo').textContent = pre + `両方（${abLabel(abKey)}）：膝は接地 ${f2(st.k0, 0)}° から最大 ${f2(st.km, 0)}°（周期 ${f2(st.kp * 100, 0)}%）まで曲がる（抜き ${f2(st.km - st.k0, 1)}°）。重心が前足の接地点を越えるのは周期 ${st.tp ? f2(st.tp * 100, 0) : '—'}%。` + (ok ? '条件はすべて満たした。' : `条件を満たしきれていない所がある（いちばん大きいのは「${VLAB[vi.worst] || vi.worst}」で約 ${vi.deg}°、位置のはみ出しは最大 ${vi.mm} mm）。`);
+  };
+
+  const markAB = () => { const kn = isKnee(abKey); document.querySelectorAll('#kdep button').forEach(b => b.setAttribute('aria-pressed', kn && b.dataset.k === String(parseInt(abKey)))); document.querySelectorAll('#khold button').forEach(b => b.setAttribute('aria-pressed', kn && b.dataset.h === abKey.slice(-1))); document.querySelectorAll('#khip button').forEach(b => b.setAttribute('aria-pressed', b.dataset.key === (kn ? 'kihon' : abKey))); document.querySelectorAll('#hipTab tr[data-key]').forEach(tr => tr.classList.toggle('cur', tr.dataset.key === abKey)); document.querySelectorAll('#kneeTab tr[data-key]').forEach(tr => tr.classList.toggle('cur', tr.dataset.key === abKey)); document.querySelectorAll('#kexp button').forEach(b => b.setAttribute('aria-pressed', b.dataset.key === abKey)); document.querySelectorAll('#expTab2 tr[data-key]').forEach(tr => tr.classList.toggle('cur', tr.dataset.key === abKey)); };
+  const setAB = key => { abKey = key; const c = ensureAB(key); VARS.AB = VARS.ABV[key]; SIM.AB = c.sim; IDX.AB = c.idx; mkExtra('AB'); JA.AB = jointAng('AB'); markAB(); abInfo(); buildTable(); resetPair(); render(); };
+  const holdOf = () => isKnee(abKey) ? abKey.slice(-1) : 'c', depthOf = () => isKnee(abKey) ? String(parseInt(abKey)) : '10';
+  document.querySelectorAll('#kdep button').forEach(b => b.addEventListener('click', () => { setAB(b.dataset.k + holdOf()); if (cur !== 'AB') setVar('AB'); }));
+  document.querySelectorAll('#khold button').forEach(b => b.addEventListener('click', () => { setAB(depthOf() + b.dataset.h); if (cur !== 'AB') setVar('AB'); }));
+  // 歩幅と腰：基本練習形と、探した歩き（VARS.HIPSCAN の順）
+  const HIPKEYS = (VARS.HIPSCAN || []).filter(h => h.maxL && VARS.ABV[h.key]).map(h => h.key);
+  document.getElementById('khip').innerHTML = `<button type="button" data-key="kihon" aria-pressed="true">0.85 m（基本練習形の歩幅）</button>` + HIPKEYS.map(k => { const v = VARS.ABV[k]; return `<button type="button" data-key="${k}" aria-pressed="false">${v.LT.toFixed(2)} m・${v.hipDrop ? '腰−' + v.hipDrop + ' cm' : '腰そのまま'}・足首${v.ank}°</button>`; }).join('');
+  document.querySelectorAll('#khip button').forEach(b => b.addEventListener('click', () => { setAB(b.dataset.key === 'kihon' ? '10c' : b.dataset.key); if (cur !== 'AB') setVar('AB'); }));
+  function buildHipTab() {
+    const H = VARS.HIPSCAN || [], LIM = VARS.HIPLIM || {};
+    const cols = ['歩き', '重複歩', '速さ', '腰の高さ<br>（平均）', '接地の膝', '足首の背屈の最大<br>立脚／遊脚', '重心が前足<br>を越える', '重心の正の仕事<br>（1 m あたり）', '着地の衝突', '股関節の<br>正の仕事', '膝の<br>正の仕事', 'これより長い歩幅で<br>外れた条件'];
+    const unit = ['', 'm', 'm/s', 'cm', '度', '度', '周期%', 'J/kg/m', 'J/kg', 'J/kg', 'J/kg', ''];
+    document.querySelector('#hipTab thead').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr><tr>${unit.map(u => `<th>${u}</th>`).join('')}</tr>`;
+    const ankMax = r => { let st = -99, sw = -99; r.R.forEach(q => { const a = q.A[0], an = a.ft - a.sh; if (q.ph[0] < r.P.TO) st = Math.max(st, an); else sw = Math.max(sw, an); }); return [st, sw]; };
+    const row = (cls, key, label, r, I, angFn, fail) => { const st = kneeStats(r, angFn), am = ankMax(r); return `<tr class="${cls}"${key ? ` data-key="${key}"` : ''}><td>${label}</td><td class="n">${f2(r.L)}</td><td class="n">${f2(r.v)}</td><td class="n">${f2(hipMean(r), 1)}</td><td class="n">${f2(st.k0, 0)}</td><td class="n">${f2(am[0], 0)}／${f2(am[1], 0)}</td><td class="n">${st.tp ? f2(st.tp * 100, 0) : '—'}</td><td class="n">${f2(I.posPerM, 3)}</td><td class="n">${f2(-I.coll, 3)}</td><td class="n">${f2(I.jw.hip[0], 3)}</td><td class="n">${f2(I.jw.knee[0], 3)}</td><td>${fail || '—'}</td></tr>`; };
+    const R = [row('ref', null, 'ふつう', SIM.base, IDX.base, p => K.angles(p, {}), '')];
+    const kb = ensureAB('10c'), vb = VARS.ABV['10c'];
+    R.push(row('', '10c', '<button type="button" class="pick" data-key="10c">選ぶ</button> 基本練習形（腰そのまま・足首 25°）', kb.sim, kb.idx, p => K.angles(p, { d: vb.d, TO: vb.TO }), '（歩幅は置いた値）'));
+    for (const h of H) { if (!h.maxL || !VARS.ABV[h.key]) continue; const c = ensureAB(h.key), v = VARS.ABV[h.key];
+      const fail = h.failL ? `${f2(h.failL)} m で「${VLAB[h.failWorst] || h.failWorst}」（${h.failDeg}°・${h.failMm} mm）` : '（探した範囲では外れず）';
+      R.push(row('', h.key, `<button type="button" class="pick" data-key="${h.key}">選ぶ</button> ${hipTxt(v)}・足首 ${v.ank}°`, c.sim, c.idx, p => K.angles(p, { d: v.d, TO: v.TO }), fail)); }
+    document.querySelector('#hipTab tbody').innerHTML = R.join('');
+    document.querySelectorAll('#hipTab button.pick').forEach(b => b.addEventListener('click', () => { setAB(b.dataset.key); if (cur !== 'AB') setVar('AB'); document.getElementById('walk').scrollIntoView({ behavior: 'smooth', block: 'center' }); }));
+    markAB();
+    const by = (d, ank) => H.find(h => h.d === d && h.ank === ank && h.maxL);
+    const g25 = by(0, 25), g35 = by(0, 35), d35 = H.filter(h => h.d > 0 && h.ank === 35 && h.maxL);
+    const S = k => ABC[k] ? ABC[k].sim : null, I = k => ABC[k] ? ABC[k].idx : null;
+    let t = '';
+    if (g25) t += `<p><b>重複歩 0.85 m は、条件の限界ではありませんでした。</b>基本練習形の条件のまま、足首の背屈の上限も 25° のままで、重複歩は ${f2(g25.maxL)} m まで伸ばせます（速さ ${f2(S(g25.key).v)} m/s、基本練習形は ${f2(kb.sim.v)} m/s）。${g25.failL ? `${f2(g25.failL)} m にすると「${VLAB[g25.failWorst] || g25.failWorst}」が外れます。` : ''}0.85 m は、10-28 夜の版の結果に合わせて置いた値でした。</p>`;
+    if (g25) t += `<p><b>歩幅を伸ばすと、腰は自然に下がります。</b>腰の高さは指定せず上限だけにしていますが、骨盤の高さの平均は、基本練習形の ${f2(hipMean(kb.sim), 1)} cm から、${f2(g25.maxL)} m で ${f2(hipMean(S(g25.key)), 1)} cm${g35 ? `、${f2(g35.maxL)} m（足首 35°）で ${f2(hipMean(S(g35.key)), 1)} cm` : ''} になりました。</p>`;
+    if (LIM.ank25) t += `<p><b>足首の上限が 25° のままでは、腰はほとんど下げられません。</b>重複歩 0.85 m のまま腰を 0.5 cm ずつ下げると、${LIM.ank25.maxDrop} cm までは条件を満たし、${LIM.ank25.failDrop} cm で「${VLAB[LIM.ank25.worst] || LIM.ank25.worst}」が外れました。</p>
+      <p class="note">【推論】足裏を床に平らに付けたまま腰を下げると、すねが前へ倒れ、その分だけ足首の背屈が増えます。前足の足裏を平らに保つ条件と、足首の背屈の上限がぶつかります。田代さんの「背屈を制限している」「MP関節のない限界に近い」は、この模型ではこの所に当たります。</p>`;
+    if (g35) t += `<p><b>足首の上限を 35° にすると、重複歩は ${f2(g35.maxL)} m まで伸びました</b>（速さ ${f2(S(g35.key).v)} m/s、ふつうの歩きは ${f2(SIM.base.v)} m/s）。${g35.failL ? `${f2(g35.failL)} m で「${VLAB[g35.failWorst] || g35.failWorst}」が外れます（${g35.failDeg}°・${g35.failMm} mm）。` : ''}このとき、重心の正の仕事（1 m あたり）は ${f2(I(g35.key).posPerM, 3)} J/kg/m（ふつう ${f2(IDX.base.posPerM, 3)}）、着地の衝突は ${f2(-I(g35.key).coll, 3)} J/kg（ふつう ${f2(-IDX.base.coll, 3)}）、股関節の正の仕事は ${f2(I(g35.key).jw.hip[0], 3)} J/kg（ふつう ${f2(IDX.base.jw.hip[0], 3)}）です。</p>`;
+    const H0v = hipMean(kb.sim);
+    for (const h of d35) { const g = g35, hm = hipMean(S(h.key)), lim = H0v - h.d; t += `<p><b>腰の高さの上限を ${h.d} cm 下げると（足首 35°）、</b>条件を満たす最も長い重複歩は ${f2(h.maxL)} m でした${g ? `（上限を下げない時は ${f2(g.maxL)} m）` : ''}。${h.failL ? `${f2(h.failL)} m で「${VLAB[h.failWorst] || h.failWorst}」が外れます。` : ''}この歩きの骨盤の高さの平均は ${f2(hm, 1)} cm で、上限（${f2(lim, 1)} cm）${hm < lim - 0.1 ? 'より低く、腰の条件は効いていません' : 'に達していて、腰の条件が効いています'}。</p>`; }
+    if (d35.length && g35) { const inactive = d35.every(h => hipMean(S(h.key)) < H0v - h.d - 0.1);
+      t += `<p class="note">【推論】${inactive ? '歩幅を長くすると腰は自然に上限より下がるので、長い歩幅の所では、腰の上限は効いていません。上限ごとの最長の歩幅の違いは、探し方の道筋の違いから出たもので、腰の高さの効果とは言えません。この模型では、歩幅の上限を決めているのは腰の高さではなく、後ろ足の足首の背屈（離れた後に底屈しない、背屈の上限）です。' : '腰の条件が効いている所で、歩幅の上限が変わりました。'}</p>
+      <p class="note">探す刻みの途中で一度外れて、その先の長い歩幅で条件を満たした所もあります（表の「外れた条件」は、最も長く満たした歩幅の次の結果です）。外れ方は 0.1〜0.2°・1〜2 mm と小さく、5 cm 刻みの最長の歩幅には ±5 cm ほどの幅を見てください。</p>`; }
+    t += `<p class="note">25° と 35° は、私が置いた設定値です。足首の背屈の正常な範囲は、膝の曲げ方や荷重で変わり、人によっても違います。文献の数値は今回確認できませんでした。この模型の足は、立脚で踵が浮くと MTP（母趾の付け根）を軸に回りますが、遊脚の足は足指を曲げない一つの板です。</p>`;
+    document.getElementById('hipFind').innerHTML = t;
+  }
+  function buildKneeTab() {
+    const cols = ['歩き', '膝の抜き<br>（実際）', '膝の最大', '膝が伸び<br>始める', '重心が前足<br>を越える', '越えるまでの<br>ブレーキの最大', '越えるまでの<br>上下の反力の最小', '越えるまでの<br>前への速さの変化', '越えてから離れる<br>までの速さの変化', '越えた後の<br>膝の正の仕事', '重心の正の仕事<br>（1 m あたり）', '着地の衝突', '条件の<br>はみ出し'];
+    const unit = ['', '度', '度（周期%）', '周期%', '周期%', '体重', '体重', 'm/s', 'm/s', 'J/kg', 'J/kg/m', 'J/kg', '度 / mm'];
+    document.querySelector('#kneeTab thead').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr><tr>${unit.map(u => `<th>${u}</th>`).join('')}</tr>`;
+    const pc0 = x => x == null ? '—' : f2(x * 100, 0);
+    const row = (cls, key, label, I, st, vi) => `<tr class="${cls}"${key ? ` data-key="${key}"` : ''}><td>${label}</td><td class="n">${f2(st.km - st.k0, 1)}</td><td class="n">${f2(st.km, 0)}（${pc0(st.kp)}）</td><td class="n">${pc0(st.kx)}</td><td class="n">${pc0(st.tp)}</td><td class="n">${f2(-st.brk, 3)}</td><td class="n">${f2(st.fzMin)}</td><td class="n">${f2(st.dvB, 2)}</td><td class="n">${f2(st.dvA, 2)}</td><td class="n">${f2(st.kw, 3)}</td><td class="n">${f2(I.posPerM, 3)}</td><td class="n">${f2(-I.coll, 3)}</td><td class="n">${vi ? `${vi.deg} / ${vi.mm}` : '—'}</td></tr>`;
+    const R = [], KS2 = {};
+    for (const k of ['base', 'slow']) { const st = kneeStats(SIM[k], p => MOD(k).angles(p, {})); KS2[k] = { ...st, I: IDX[k] }; R.push(row('ref', null, NAMES[k], IDX[k], st, null)); }
+    for (const key of KEYS) { const c = ensureAB(key), v = VARS.ABV[key], st = kneeStats(c.sim, p => K.angles(p, { d: v.d, TO: v.TO })); KS2[key] = { ...st, I: c.idx, vi: v.viol }; R.push(row('', key, `<button type="button" class="pick" data-key="${key}">選ぶ</button> ${abLabel(key)}`, c.idx, st, v.viol)); }
+    document.querySelector('#kneeTab tbody').innerHTML = R.join('');
+    document.querySelectorAll('#kneeTab button.pick').forEach(b => b.addEventListener('click', () => { setAB(b.dataset.key); if (cur !== 'AB') setVar('AB'); document.getElementById('walk').scrollIntoView({ behavior: 'smooth', block: 'center' }); }));
+    markAB();
+    const c10 = KS2['10c'], s10 = KS2['10s'], c30 = KS2['30c'], s30 = KS2['30s'];
+    const cs = KEYS.filter(k => k.endsWith('c')).map(k => KS2[k]), ss = KEYS.filter(k => k.endsWith('s')).map(k => KS2[k]);
+    const rng = (arr, f, d) => `${f2(Math.min(...arr.map(f)), d)}〜${f2(Math.max(...arr.map(f)), d)}`;
+    const DEPTHS = [10, 15, 20, 25, 30];
+    const lessList = f => { const L = DEPTHS.filter(d => f(KS2[d + 'c']) < f(KS2[d + 's']) - 1e-3); return L.length === DEPTHS.length ? 'すべての深さ' : L.length ? L.map(d => d + '°').join('・') : 'どの深さでもない（同じか大きい）'; };
+    const fzLow = Math.min(...cs.map(q => q.fzMin), ...ss.map(q => q.fzMin));
+    const bad = KEYS.filter(k => { const v = KS2[k].vi; return v.deg >= 0.5 || v.mm >= 1 || (v.ms || 0) >= 0.02; });
+    document.getElementById('kneeFind').innerHTML = `
+      <p><b>重心が前足を越えるまで膝を曲げた時の、接地のあとのブレーキと減速（すぐ伸ばす → 曲げる）。</b>${DEPTHS.map(d => `${d}°：ブレーキの最大 ${f2(-KS2[d + 's'].brk, 3)} → ${f2(-KS2[d + 'c'].brk, 3)} 体重、越えるまでに減る速さ ${f2(-KS2[d + 's'].dvB, 2)} → ${f2(-KS2[d + 'c'].dvB, 2)} m/s、着地の衝突 ${f2(-KS2[d + 's'].I.coll, 3)} → ${f2(-KS2[d + 'c'].I.coll, 3)} J/kg`).join('。')}。ブレーキが小さくなったのは ${lessList(q => -q.brk)}、減る速さが小さくなったのは ${lessList(q => -q.dvB)} です。重心が前足を越える時は、曲げる歩きの方が遅くなりました（すぐ伸ばす ${rng(ss, q => q.tp * 100, 0)}% → 曲げる ${rng(cs, q => q.tp * 100, 0)}%）。</p>
+      <p><b>ただし、接地の瞬間に前へ加速する形にはなりませんでした。</b>どの歩きでも、重心が前足を越えるまでは前後の力が後ろ向き（ブレーキ）です。重心が前足を越えるのは周期 ${rng(cs, q => q.tp * 100, 0)}% で、その後に前向きの力が出て、減った分の速さ（${rng(cs, q => q.dvA, 2)} m/s）を取り戻します。</p>
+      <p class="note">【推論】この模型では、前足の反力は接地点から重心を通る向きとしています。重心が前足より後ろにある間は、前足に体重が乗るほどブレーキになります。膝を曲げて前足の荷重を抜くほどブレーキは小さくなりますが、0 にするには、重心がほぼ自由落下する（上下の反力が 0 に近づく）必要があります。今の歩きで、越えるまでの上下の反力が最も下がったのは ${f2(fzLow)} 体重です。探し方は「ふつうの歩きからの変更を最小にする」ので、抜重を許しても、自分から大きく抜重する答えは選びません。</p>
+      <p><b>${(c30.I.posPerM / c10.I.posPerM < 1.2 && s30.I.posPerM / s10.I.posPerM > 1.5) ? '重心が越えるまで曲げる歩きでは、膝を深くしても、重心の仕事はほとんど増えませんでした。' : '膝を深くした時の、仕事の増え方。'}</b>抜きを 10° から 30° にすると、すぐ伸ばす歩きでは、重心の正の仕事（1 m あたり）が ${f2(s10.I.posPerM, 3)} → ${f2(s30.I.posPerM, 3)} J/kg/m、着地の衝突が ${f2(-s10.I.coll, 3)} → ${f2(-s30.I.coll, 3)} J/kg です。重心が越えるまで曲げる歩きでは、重心の正の仕事が ${f2(c10.I.posPerM, 3)} → ${f2(c30.I.posPerM, 3)} J/kg/m、着地の衝突が ${f2(-c10.I.coll, 3)} → ${f2(-c30.I.coll, 3)} J/kg です。そのかわり、股関節の正の仕事が ${f2(c10.I.jw.hip[0], 3)} → ${f2(c30.I.jw.hip[0], 3)} J/kg に増えます（すぐ伸ばす歩きは ${f2(s10.I.jw.hip[0], 3)} → ${f2(s30.I.jw.hip[0], 3)}）。</p>
+      <p class="note">【推論】膝を曲げたまま重心を前足の上まで運ぶと、着地で失う分（衝突）が小さくなり、その分、取り戻す仕事も小さくて済む、と読めます。ただし股関節の仕事は増えるので、楽になるかどうかは、股関節の仕事をどれだけ筋や腱のばねが返せるかによります（この模型にはばねが入っていません）。</p>
+      <p><b>どの歩きでも、越えるまでに減る速さと、越えてから増える速さは、ほぼ同じ大きさです。</b>一周期で同じ速さに戻る歩き（定常歩行）では、必ずそうなります。増える速さが大きいことは、速く歩けることではなく、一歩の中の速さの揺れが大きいことを表します。重心が越えるまで曲げる歩きは、この揺れが小さい歩きです。</p>
+      <p class="note">【推論】田代さんの言う「乗り込み」（前足に移る瞬間に前へ加速する）をこの模型で出すには、前の膝が抜けている間に後ろ足がまだ体重を受けている時間（両脚支持）が要ります。重心は後ろ足より前にあるので、後ろ足の反力は前向きになるからです。今の「蹴らない」は両脚支持を周期の1%にしているので、その時間がありません。</p>
+      ${bad.length ? `<p class="note">条件を満たしきれていない歩き：${bad.map(k => `${abLabel(k)}（${KS2[k].vi.deg}°・${KS2[k].vi.mm} mm${(KS2[k].vi.ms || 0) >= 0.02 ? `・${KS2[k].vi.ms} m/s` : ''}）`).join('、')}。表の右端は、いちばん外れた条件の角度と位置のずれです。</p>` : ''}`;
+  }
+  document.getElementById('rockerFind').innerHTML = `
+    <p>計算は三つの部分でできています。</p>
+    <ol>
+      <li><b>関節の角度。</b>入力です。どんな歩きの角度でも入れられます。ロッカー理論とは関係ありません。</li>
+      <li><b>足が床に触れる所。</b>立脚の足を、踵→足裏→MTP の順に床の上で転がします。足の傾きで、床に触れる点が決まります。ここがロッカー理論の部分です。</li>
+      <li><b>力。</b>重心の加速度から反力を出し（ニュートンの法則）、足→すね→太ももの順に関節の力を出します。歩き方によらず同じです。</li>
+    </ol>
+    <p>ロッカー理論が効いているのは 2 と、変数の歩きの「探し方」です。探し方は、ふつうの歩きからの変更がいちばん小さい答えを選びます。そのため、条件にしていない所は、ふつうの歩き（ロッカーの歩き）に近いまま残ります。田代さんの言葉を条件として足すと、その所は上書きされます。今回の足裏の直しは、2 の影響（足が少し傾くと、床に触れる点が足裏の上を大きく滑る）を、条件で消したものです。</p>
+    <p>【推論】パラメータの調整そのものは、この作りのままでできます。調整できる口は、膝の抜きの深さと伸ばし始める時のように、条件の数として出せます。ほかに出せる候補は、遊脚の足を水平にし始める時、荷重中の足裏を平らに保つ長さ、両脚支持の長さ、歩幅です。</p>
+    <p class="note">できないこと：この模型は動きを与えて力を出します（逆動力学）。「膝を抜くと前へ進む」の「進む」は、ここでは結果として出ません。床の上で足裏の圧の位置が自由に動く（足が平らなまま圧の中心が踵から MTP へ移る）ことも、まだ入っていません。今の作りでは、足が平らな間の圧の点は、足のわずかな傾きで決まります。</p>`;
+
+  // ---- コピー ----
+  const mkTxt = () => [`歩行の土台模型：ふつう・ゆっくり・足裏水平・蹴らない・両方（膝の抜き ${abLabel(abKey)}）（歩調はふつうと同じ、ゆっくりを除く）`, ...ROWS.map(([nm, u, f, dg]) => `${nm}（${u}）：` + ORDER.map(k => `${NAMES[k]} ${f(IDX[k]).toFixed(dg)}`).join('、'))].join('\n');
+  let txt = mkTxt();
+  document.getElementById('copyText').value = txt;
+  document.getElementById('copy').addEventListener('click', () => {
+    const msg = document.getElementById('copyMsg'); txt = mkTxt(); document.getElementById('copyText').value = txt;
+    const fall = () => { const t = document.getElementById('copyText'); t.focus(); t.select(); msg.textContent = '選んだので、長押しや Ctrl+C でコピーしてください'; };
+    try { navigator.clipboard.writeText(txt).then(() => { msg.textContent = 'コピーしました'; }, fall); } catch (e) { fall(); }
+  });
+
+  // ---- 操作 ----
+  const pb = document.getElementById('play'), sl = document.getElementById('phase'), rd = document.getElementById('phRead');
+  const setPlay = v => { playing = v; pb.textContent = v ? '止める' : '動かす'; };
+  setPlay(playing);
+  pb.addEventListener('click', () => setPlay(!playing));
+  document.querySelectorAll('#spd button').forEach(b => b.addEventListener('click', () => { speed = +b.dataset.sp; document.querySelectorAll('#spd button').forEach(x => x.setAttribute('aria-pressed', x === b)); }));
+  const setVar = v => { cur = v; document.querySelectorAll('#vsel button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === v)); document.getElementById('vnote').textContent = NOTE[v]; mate = null; markMate(); resetPair(); buildTable(); render(); };
+  document.querySelectorAll('#vsel button').forEach(b => b.addEventListener('click', () => setVar(b.dataset.v)));
+  document.getElementById('ghost').addEventListener('change', e => { ghost = e.target.checked; render(); });
+  document.getElementById('ankl').addEventListener('change', e => { showAnk = e.target.checked; render(); });
+  sl.addEventListener('input', () => { phase = sl.value / 1000; setPlay(false); render(); });
+  function render() { drawWalk(); drawCycle(); drawPair(); draws.forEach(d => d()); const p = ((phase % 1) + 1) % 1; sl.value = Math.round(p * 1000) % 1000; rd.textContent = (p * 100).toFixed(0) + '%'; }
+  let lastDraw = 0, lastPair = 0;
+  function tick(ts) {
+    const dR = last != null ? Math.min(0.1, (ts - last) / 1000) : 0;
+    if (playing) phase = (phase + dR * speed / P0.T) % 1;
+    last = ts;
+    if (pPlay) stepPair(dR);
+    if (pPlay || pHold > 0 || ts - lastPair > 500) { drawPair(); lastPair = ts; }
+    if (playing || ts - lastDraw > 500) { drawWalk(); drawCycle(); if (ts - lastDraw > 120) { draws.forEach(d => d()); lastDraw = ts; } const p = phase % 1; sl.value = Math.round(p * 1000) % 1000; rd.textContent = (p * 100).toFixed(0) + '%'; }
+    requestAnimationFrame(tick);
+  }
+  const retheme = () => { readColors(); render(); };
+  window.addEventListener('resize', () => render());
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme); } catch (e) {}
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  // ---- 試し（10-30 夜）：腱のばね ----
+  // 筋が引く向きの関節モーメント M+ で腱が伸びる（直列のばね）。蓄え E = M+^2/(2k)。筋が自分で出すパワー = 関節のパワー + dE/dt
+  const EXP = VARS.EXP, KB = EXP.kB, EXPK = ['S1', 'S4', 'NKF', 'DS6', 'RET', 'RET6'].filter(k => VARS.ABV[k]);
+  const SJ = [['ank', 'Ma', 'Pa'], ['knee', 'Mk', 'Pk'], ['hip', 'Mh', 'Ph']];
+  const sSplit = (J, N, dt, k) => { const out = {}, s = { wp: 0, fp: 0, fn: 0 };
+    for (const [nm, mk, pk] of SJ) { const M = J[mk], P = J[pk], kk = k[nm];
+      const E = M.map(m => kk > 0 && kk < 1e8 && m > 0 ? m * m / (2 * kk) : 0); let wp = 0, wn = 0, fp = 0, fn = 0; const Pf = [];
+      for (let j = 0; j < N; j++) { const dE = (E[(j + 1) % N] - E[(j - 1 + N) % N]) / (2 * dt), pf = P[j] + dE; Pf.push(pf); if (P[j] > 0) wp += P[j] * dt; else wn += P[j] * dt; if (pf > 0) fp += pf * dt; else fn += pf * dt; }
+      out[nm] = { wp, wn, fp, fn, E, Pf }; s.wp += wp; s.fp += fp; s.fn += fn; }
+    out.sum = s; return out; };
+  const sBest = (J, N, dt) => { const k = {}; for (const [nm] of SJ) { let b = null; for (let e = -1; e <= 3.0001; e += 0.02) { const kk = 10 ** e, v = sSplit(J, N, dt, { ank: 1e9, knee: 1e9, hip: 1e9, [nm]: kk })[nm].fp; if (!b || v < b.v) b = { kk, v }; } k[nm] = b.kk; } return k; };
+  const measJ = (Dk, T) => { const dd = a => a.map((_, i) => (a[(i + 1) % 100] - a[(i + 99) % 100]) / (2 * T / 100) * RAD); const dA = dd(four(Dk.ank, 100)), dK = dd(four(Dk.knee, 100)), dH = dd(four(Dk.hip, 100));
+    return { Ma: Dk.meas_ma, Pa: Dk.meas_ma.map((m, i) => -m * dA[i]), Mk: Dk.meas_mk, Pk: Dk.meas_mk.map((m, i) => -m * dK[i]), Mh: Dk.meas_mh, Ph: Dk.meas_mh.map((m, i) => m * dH[i]) }; };
+  // 一つの歩きの数：J（右脚の関節）、N、dt、離地、速さ、重複歩
+  const expOf = (J, N, dt, TO, v, L) => { const o = sSplit(J, N, dt, KB), ob = sSplit(J, N, dt, sBest(J, N, dt)), jTO = Math.round(TO * N); let eTO = 0;
+    for (let j = jTO - Math.max(1, Math.round(0.03 * N)); j < jTO; j++) eTO = Math.max(eTO, o.ank.E[(j + N) % N]);
+    return { o, ob, eTO, v, L, perM: 2 * o.sum.wp / L, perMF: 2 * o.sum.fp / L, perMB: 2 * ob.sum.fp / L }; };
+  const expSim = r => expOf(r.J[0], r.N, r.dt, r.P.TO, r.v, r.L);
+  const EXC = {};
+  const expKeyOf = (k, key) => k === 'AB' ? 'AB:' + key : k;
+  const expGet = (k, key) => { const id = expKeyOf(k, key); if (!EXC[id]) EXC[id] = expSim(k === 'AB' ? ensureAB(key).sim : SIM[k]); return EXC[id]; };
+  // 離れる前に足首が底屈した量（立脚 30% から離地までの最大の背屈から、離地の時までに何度戻ったか）。v7 の「蹴らない」はこれを禁じていた
+  const latePlantar = r => { const a = j => { const s = r.R[(j + r.N) % r.N].A[0]; return s.ft - s.sh; }, j0 = Math.round(0.3 * r.N), j1 = Math.round(r.P.TO * r.N); let mx = -1e9, jm = j0; for (let j = j0; j <= j1; j++) if (a(j) > mx) { mx = a(j); jm = j; } return { deg: mx - a(j1), from: jm / r.N, top: mx, end: a(j1) }; };
+  const kTxt = k => `足首 ${f2(k.ank, 1)}・膝 ${f2(k.knee, 1)}・股関節 ${f2(k.hip, 1)}`;
+  document.getElementById('expK').textContent = `ばねの硬さ（体重1kgあたりの回転の硬さ、N·m/rad/kg）：${kTxt(KB)}。模型のふつうの歩きに合わせた値です（札 a）。同じ公開データの実測の関節モーメントと角度に合わせると ${kTxt(EXP.kM)} で、この値でも向きは変わりません（下の読み）。`;
+  function buildExpTab() {
+    const cols = ['歩き', '速さ', '関節の正の仕事<br>合計（うち足首）', 'ばねの後の筋の<br>正の仕事（うち足首）', '変化', '1 m あたり（両脚）<br>ばね無し → ばね有り', 'その歩きに合わせた<br>ばねなら（1 m あたり）', '離れる直前の<br>アキレス腱の蓄え'];
+    const unit = ['', 'm/s', 'J/kg（右脚・一周期）', 'J/kg', '%', 'J/kg/m', 'J/kg/m', 'J/kg'];
+    document.querySelector('#expTab thead').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr><tr>${unit.map(u => `<th>${u}</th>`).join('')}</tr>`;
+    const row = (cls, label, q, key) => `<tr class="${cls}"${key ? ` data-key="${key}"` : ''}><td>${label}</td><td class="n">${f2(q.v)}</td><td class="n">${f2(q.o.sum.wp, 3)}（${f2(q.o.ank.wp, 3)}）</td><td class="n">${f2(q.o.sum.fp, 3)}（${f2(q.o.ank.fp, 3)}）</td><td class="n ${q.o.sum.fp > q.o.sum.wp * 1.1 ? 'up' : q.o.sum.fp < q.o.sum.wp * 0.9 ? 'down' : ''}">${sp(q.o.sum.fp, q.o.sum.wp)}</td><td class="n">${f2(q.perM, 3)} → ${f2(q.perMF, 3)}</td><td class="n">${f2(q.perMB, 3)}</td><td class="n">${f2(q.eTO, 3)}</td></tr>`;
+    const qMB = expOf(measJ(K.D, MEAS.T), 100, MEAS.T / 100, K.D.TO, MEAS.v, MEAS.L), qMS = expOf(measJ(KS.D, VARS.slowMeas.T), 100, VARS.slowMeas.T / 100, KS.D.TO, VARS.slowMeas.v, VARS.slowMeas.L);
+    EXC.mBase = qMB; EXC.mSlow = qMS;
+    const R = [row('ref', 'ふつう（実測）', qMB), row('ref', 'ゆっくり（実測）', qMS)];
+    for (const k of ['base', 'slow', 'A', 'B']) R.push(row('', NAMES[k], expGet(k)));
+    const SL = { '10c': '両方 基本練習形', '10s': '両方 膝10°・すぐ伸ばす', '30c': '両方 膝30°・越えるまで曲げる', 'L0': '両方 重複歩 1.05 m', 'L0_35': '両方 重複歩 1.25 m・足首35°' };
+    for (const key of ['10c', '10s', '30c', 'L0', 'L0_35']) R.push(row('', SL[key], expGet('AB', key), key));
+    document.querySelector('#expTab tbody').innerHTML = R.join('');
+    const B = expGet('base'), Sl = expGet('slow'), C10 = expGet('AB', '10c'), Bk = expGet('B'), L35 = expGet('AB', 'L0_35');
+    // 実測に合わせた硬さでも同じ向きか
+    const om = key => sSplit(ensureAB(key).sim.J[0], N, SIM.base.dt, EXP.kM).sum.fp, omB = sSplit(SIM.base.J[0], N, SIM.base.dt, EXP.kM).sum.fp;
+    document.getElementById('expFind1').innerHTML = `
+      <p><b>動きを変えずにばねを入れても、模型は崩れませんでした。</b>動き・反力・関節の力はそのままで、変わるのは「関節の仕事のうち、筋が自分で出す分」だけです。一周期で、ばねが蓄えた分と返した分は同じなので、正味の仕事も変わりません。</p>
+      <p><b>ふつうの歩きでは、ばねが筋の仕事を減らします。</b>右脚の関節の正の仕事は ${f2(B.o.sum.wp, 3)} → ${f2(B.o.sum.fp, 3)} J/kg（${sp(B.o.sum.fp, B.o.sum.wp)}）、そのほとんどは足首です（${f2(B.o.ank.wp, 3)} → ${f2(B.o.ank.fp, 3)}）。アキレス腱は、立脚の中ほどに足首が背屈しながら力を受ける間に伸びて蓄え、離れる前の押し出し（両脚支持の間の底屈）で返します。同じ公開データの実測でも、${f2(qMB.o.sum.wp, 3)} → ${f2(qMB.o.sum.fp, 3)} J/kg と減りました。</p>
+      <p><b>両方（基本練習形）では、同じ体のばねが、逆に筋の仕事を増やします。</b>${f2(C10.o.sum.wp, 3)} → ${f2(C10.o.sum.fp, 3)} J/kg（${sp(C10.o.sum.fp, C10.o.sum.wp)}）。足首だけで ${f2(C10.o.ank.wp, 3)} → ${f2(C10.o.ank.fp, 3)} です。足首の底屈の力は立脚の終わりに ${f2(Math.max(...ensureAB('10c').sim.J[0].Ma), 2)} N·m/kg（ふつうの約${Math.round(Math.max(...ensureAB('10c').sim.J[0].Ma) / Math.max(...SIM.base.J[0].Ma) * 10)}割）まで上がり、アキレス腱には離れる直前に ${f2(C10.eTO, 3)} J/kg が残っています（ふつうは ${f2(B.eTO, 3)}）。足首は底屈しないまま、前の足に体重が移る周期の1%の間に力が抜けるので、この蓄えは前へ進む仕事に使われず、筋が吸収します（下の図の、離地の所の下向きの針）。蹴らない（${f2(Bk.eTO, 3)} J/kg）、歩幅 1.25 m の両方（${f2(L35.eTO, 3)} J/kg）も同じです。</p>
+      <p><b>1 m あたりで比べると、順番が入れ替わります。</b>ばね無しでは、両方 ${f2(C10.perM, 3)}、ゆっくり ${f2(Sl.perM, 3)} J/kg/m で、両方の方が小さい。同じ体のばねを入れると、両方 ${f2(C10.perMF, 3)}、ゆっくり ${f2(Sl.perMF, 3)} J/kg/m です。それぞれの歩きに一番合う硬さのばねを選べるとしても（実際の体では選べません）、両方 ${f2(C10.perMB, 3)}、ゆっくり ${f2(Sl.perMB, 3)} です。実測に合わせた硬さでは、両方の右脚 ${f2(C10.o.sum.wp, 3)} → ${f2(om('10c'), 3)}、ふつう ${f2(B.o.sum.wp, 3)} → ${f2(omB, 3)} J/kg で、向きは同じでした。</p>
+      <p class="note">【推論】アキレス腱のばねは、「立脚で足首が背屈しながら蓄え（田代さんの言うアンクルロッカーの増大）」「後ろ足に体重が残っている間に底屈して返す」の2つがそろって働きます。返す方は、形としては押し出し（蹴り）です。投稿の「返ってくる反発で進む」を足首でやると、模型の「蹴らない（離れるまで底屈に戻らない、切り替えは瞬間）」とぶつかります。</p>
+      <p class="note">確かでない所：この模型の股関節の力は合いが悪く（下の「模型の確かさ」）、股関節のばね（腸腰筋）はほとんど効きませんでした。実測の値では、股関節のばねは ${f2(qMB.o.hip.wp, 3)} → ${f2(qMB.o.hip.fp, 3)} J/kg と効きます。股関節のばねについては、この模型からは言えません。足裏が平らな間の圧の中心は、足のわずかな傾きで決まる作りのまま（前へ自由に動かない）です。</p>`;
+  }
+  // 図：アキレス腱の蓄えと、足首の筋が自分で出すパワー
+  const eHost = document.getElementById('expCharts');
+  const expCur = () => cur === 'AB' ? expGet('AB', abKey) : expGet(cur);
+  draws.push(chart(eHost, 'アキレス腱の蓄え（右脚）', 'J/kg', () => [{ y: expGet('base').o.ank.E, col: 'mute', dash: [6, 4], w: 1.5 }, { y: expCur().o.ank.E, col: 'acc' }], { step: 0.02, lo: 0 }));
+  draws.push(chart(eHost, '足首の筋が自分で出すパワー（ばねの後）', 'W/kg、正＝筋が縮みながら出す', () => [{ y: expGet('base').o.ank.Pf, col: 'mute', dash: [6, 4], w: 1.5 }, { y: expCur().o.ank.Pf, col: 'acc' }], { step: 1 }));
+  // 段2
+  document.getElementById('kexp').innerHTML = `<button type="button" data-key="10c" aria-pressed="true">基本練習形（v7）</button>` + EXPK.map(k => `<button type="button" data-key="${k}" aria-pressed="false">${VARS.ABV[k].expShort}</button>`).join('');
+  document.querySelectorAll('#kexp button').forEach(b => b.addEventListener('click', () => { setAB(b.dataset.key); if (cur !== 'AB') setVar('AB'); }));
+  function buildExpTab2() {
+    const cols = ['歩き', '変更の<br>大きさ', 'ばねの後の筋の正の<br>仕事（うち足首）', '足首の筋が<br>吸収した仕事', '離れる直前の<br>アキレス腱の蓄え', '離れる前の<br>足首の底屈', '重心の正の仕事<br>（1 m あたり）', '着地の衝突', '重心が前足<br>を越える', '速さ', '条件の<br>はみ出し'];
+    const unit = ['', '5°で1', 'J/kg', 'J/kg', 'J/kg', '度', 'J/kg/m', 'J/kg', '周期%', 'm/s', '度 / mm'];
+    document.querySelector('#expTab2 thead').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr><tr>${unit.map(u => `<th>${u}</th>`).join('')}</tr>`;
+    const R = [];
+    for (const key of ['10c', ...EXPK]) { const v = VARS.ABV[key], c = ensureAB(key), q = expGet('AB', key), st = kneeStats(c.sim, p => K.angles(p, { d: v.d, TO: v.TO })), vi = v.viol;
+      const nk = (vi.nokickF != null ? `<br>筋の正 ${vi.nokickF}（上限 0.01）` : '') + (vi.returnF != null ? `<br>吸収 ${vi.returnF}（上限 0.03） J/kg` : '');
+      R.push(`<tr data-key="${key}"><td><button type="button" class="pick" data-key="${key}">選ぶ</button> ${key === '10c' ? '基本練習形（v7）' : v.expLabel}</td><td class="n">${chgOf(v.d).toFixed(0)}</td><td class="n">${f2(q.o.sum.fp, 3)}（${f2(q.o.ank.fp, 3)}）</td><td class="n">${f2(-q.o.ank.fn, 3)}</td><td class="n">${f2(q.eTO, 3)}</td><td class="n">${f2(latePlantar(c.sim).deg, 1)}</td><td class="n">${f2(c.idx.posPerM, 3)}</td><td class="n">${f2(-c.idx.coll, 3)}</td><td class="n">${st.tp ? f2(st.tp * 100, 0) : '—'}</td><td class="n">${f2(c.sim.v)}</td><td class="n">${vi.deg} / ${vi.mm}${nk}</td></tr>`); }
+    document.querySelector('#expTab2 tbody').innerHTML = R.join('');
+    document.querySelectorAll('#expTab2 button.pick').forEach(b => b.addEventListener('click', () => { setAB(b.dataset.key); if (cur !== 'AB') setVar('AB'); document.getElementById('walk').scrollIntoView({ behavior: 'smooth', block: 'center' }); }));
+    markAB();
+    const g = k => VARS.ABV[k] ? { v: VARS.ABV[k], q: expGet('AB', k), c: ensureAB(k) } : null, b0 = g('10c'), s1 = g('S1'), s4 = g('S4'), nk = g('NKF'), d6 = g('DS6'), rt = g('RET'), r6 = g('RET6');
+    let t = '';
+    if (s1 && s4) t += `<p><b>探し方にばねを足しても、基本練習形の動きはほとんど変わりませんでした。</b>ばねの後の筋の正の仕事は、重み 1 で ${f2(b0.q.o.sum.fp, 3)} → ${f2(s1.q.o.sum.fp, 3)}、重み 4 で ${f2(s4.q.o.sum.fp, 3)} J/kg です。減ったのは主に膝で、足首は ${f2(b0.q.o.ank.fp, 3)} → ${f2(s4.q.o.ank.fp, 3)} とほとんど減りません。関節の動きの変更の大きさも ${chgOf(b0.v.d).toFixed(0)} → ${chgOf(s4.v.d).toFixed(0)} です。田代さんの条件がこの歩きの形をほぼ決めていて、ばねの分だけ動く余地が残っていません。崩れもしませんでした（条件のはみ出しは ${s4.v.viol.deg}°・${s4.v.viol.mm} mm 以下）。</p>`;
+    if (nk) t += `<p><b>「蹴らない」を、足首の角度ではなく「足首の筋が自分で押さない」に替えると。</b>腱の反動で底屈するのは許しました。模型は反動の底屈を選ばず、${nk.v.viol.nokickF != null && nk.v.viol.nokickF > 0.0105 ? `足首の筋の正の仕事を ${f2(b0.q.o.ank.fp, 3)} → ${f2(nk.q.o.ank.fp, 3)} J/kg まで下げたところで止まりました（条件は ${f2(VARS.ABV.NKF.FMAX, 2)} J/kg 以下。満たしきれていません）。` : `足首の筋の正の仕事を ${f2(b0.q.o.ank.fp, 3)} → ${f2(nk.q.o.ank.fp, 3)} J/kg に下げました。`}下げ方は、底屈の力が上がる間に足首を背屈させ続けることでした（腱を、筋ではなく関節の回りで伸ばす）。離れる前の底屈は ${f2(latePlantar(nk.c.sim).deg, 1)}° で、離れる直前の蓄え ${f2(nk.q.eTO, 3)} J/kg は、やはり返されずに筋が吸収します（足首の筋が吸収した仕事 ${f2(-b0.q.o.ank.fn, 3)} → ${f2(-nk.q.o.ank.fn, 3)} J/kg）。重心の正の仕事（1 m あたり）は ${f2(b0.c.idx.posPerM, 3)} → ${f2(nk.c.idx.posPerM, 3)}、衝突は ${f2(-b0.c.idx.coll, 3)} → ${f2(-nk.c.idx.coll, 3)} J/kg でした。</p>`;
+    if (d6) t += `<p><b>両脚支持を周期の6%にしても</b>（同じく足首の筋は押さない）、模型は底屈を選びませんでした（離れる前の底屈 ${f2(latePlantar(d6.c.sim).deg, 1)}°）。後ろ足の力は両脚支持の間にゆっくり抜けますが、その間も足首は背屈し続け、腱の蓄えは筋が吸収しました（${f2(-d6.q.o.ank.fn, 3)} J/kg）。この探し方は、筋が吸収する仕事を数えないためです。</p>`;
+    if (rt) { const lp = latePlantar(rt.c.sim); t += `<p><b>「腱の蓄えを捨てない」（足首の筋が吸収する仕事も 0.03 J/kg 以下）を足すと、模型は後ろ足の足首を、離れる前に底屈させました。</b>両脚支持 1% の歩きで、周期 ${f2(lp.from * 100, 0)}% の背屈 ${f2(lp.top, 1)}° から、離れる時の ${f2(lp.end, 1)}° まで、${f2(lp.deg, 1)}° 底屈します。これは v7 の「蹴らない」（立脚の15%から離れるまで底屈に戻らない）が禁じていた動きです。そのかわり、重心の正の仕事（1 m あたり）は ${f2(b0.c.idx.posPerM, 3)} → ${f2(rt.c.idx.posPerM, 3)}、着地の衝突は ${f2(-b0.c.idx.coll, 3)} → ${f2(-rt.c.idx.coll, 3)} J/kg に減りました。ただし条件は満たしきれていません（足首の筋の正の仕事 ${rt.v.viol.nokickF}、吸収 ${rt.v.viol.returnF} J/kg。離れる直前にまだ ${f2(rt.q.eTO, 3)} J/kg が残る）。${r6 ? `両脚支持 6% でも同じ形で（底屈 ${f2(latePlantar(r6.c.sim).deg, 1)}°）、やはり満たしきれませんでした（吸収 ${r6.v.viol.returnF} J/kg、位置のはみ出し ${r6.v.viol.mm} mm）。` : ''}</p>`; }
+    t += `<p class="note">【推論】腱のばねが返すのは、腱にかかる力が下がる間です。後ろ足の力が下がるのは、前の足に体重が移る間（両脚支持）です。その間に足首が底屈すれば、返したエネルギーが前へ進む仕事になり、底屈しなければ筋が吸収して熱になります。両脚支持がほぼ無い歩き（周期の1%）では、後ろ足の力は離れる瞬間に一度に抜けるので、その時に残っている蓄えは返せません。返せるのは、それより前に力が下がる分だけです${rt ? `（腱の蓄えを捨てない歩きで、蓄えの最大 ${f2(Math.max(...rt.q.o.ank.E), 3)} J/kg のうち、離れる瞬間に ${f2(rt.q.eTO, 3)} J/kg が残った）` : ''}。この模型では、「アキレス腱のばねで返す」と「離れるまで足首を底屈させない」は両立しません。返すには、後ろ足にまだ体重が残っている間の底屈（形としては押し出し）が要ります。</p>
+      <p class="note">崩れたかどうか：どの探し直しでも、絵が崩れたり計算が止まったりはしませんでした。ぶつかったのは、ばねで返すことと、角度で決めた「蹴らない」です。「蹴らない」を「足首の筋が押さない」に替えると、腱の反動による底屈が出てきます。田代さんの「意識的に蹴る操作ではない」（10-28）が、こちらの意味なら、ばねの原理と両立する可能性があります（未確認）。</p>`;
+    document.getElementById('expFind2').innerHTML = t;
+  }
+  abInfo(); setVar('AB'); requestAnimationFrame(tick);
+  setTimeout(() => { try { buildExpTab(); } catch (e) { document.querySelector('#expTab tbody').innerHTML = `<tr><td>計算でエラーが出ました：${e.message}</td></tr>`; } }, 40);
+  setTimeout(() => { try { buildExpTab2(); } catch (e) { document.querySelector('#expTab2 tbody').innerHTML = `<tr><td>計算でエラーが出ました：${e.message}</td></tr>`; } }, 90);
+  setTimeout(() => { try { buildHipTab(); } catch (e) { document.querySelector('#hipTab tbody').innerHTML = `<tr><td>計算でエラーが出ました：${e.message}</td></tr>`; } }, 120);
+  setTimeout(() => { try { buildKneeTab(); } catch (e) { document.querySelector('#kneeTab tbody').innerHTML = `<tr><td>計算でエラーが出ました：${e.message}</td></tr>`; } }, 60);
+})();
+</script>
+
